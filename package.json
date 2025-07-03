@@ -1,0 +1,33 @@
+{
+  "name": "@zeroeval/sdk",
+  "version": "0.0.1",
+  "description": "ZeroEval TypeScript SDK – observability and tracing utilities",
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "watch": "tsup src/index.ts --format esm,cjs --dts --watch"
+  },
+  "peerDependencies": {
+    "openai": "^4",
+    "langchain": "^0.1"
+  },
+  "peerDependenciesMeta": {
+    "langgraph": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "tsup": "^7.2.0",
+    "typescript": "^5.3.0",
+    "rimraf": "^5.0.0",
+    "@types/node": "^20.11.0"
+  }
+}
