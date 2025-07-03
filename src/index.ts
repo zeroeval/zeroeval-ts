@@ -5,6 +5,7 @@
  */
 
 export { span } from './observability/spanDecorator';
+export { withSpan } from './observability/spanDecorator';
 export { tracer } from './observability/Tracer';
 export { init } from './init';
 export {

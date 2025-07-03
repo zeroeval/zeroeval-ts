@@ -3,9 +3,9 @@
   "version": "0.0.1",
   "description": "ZeroEval TypeScript SDK – observability and tracing utilities",
   "type": "module",
-  "main": "./dist/cjs/index.js",
-  "module": "./dist/esm/index.js",
-  "types": "./dist/types/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "files": [
     "dist"
   ],

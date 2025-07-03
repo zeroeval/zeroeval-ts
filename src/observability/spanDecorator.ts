@@ -1,5 +1,9 @@
 import { tracer } from './Tracer';
 import { Span } from './Span';
+import { inspect } from 'util';
+import { randomUUID } from 'crypto';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 export interface SpanOptions {
   name: string;
@@ -31,7 +35,12 @@ export function span(opts: SpanOptions): MethodDecorator & ((target: any, ...arg
           if (isAsync && result && typeof result.then === 'function') {
             return result
               .then((r: any) => {
-                spanInst.setIO(opts.inputData ?? args, opts.outputData ?? r);
+                // capture args if inputData not provided
+                if (opts.inputData === undefined) {
+                  spanInst.setIO(JSON.stringify(args, replacer, 2), opts.outputData ?? r);
+                } else {
+                  spanInst.setIO(opts.inputData, opts.outputData ?? r);
+                }
                 tracer.endSpan(spanInst);
                 return r;
               })
@@ -42,7 +51,11 @@ export function span(opts: SpanOptions): MethodDecorator & ((target: any, ...arg
               });
           }
           // sync path
-          spanInst.setIO(opts.inputData ?? args, opts.outputData ?? result);
+          if (opts.inputData === undefined) {
+            spanInst.setIO(JSON.stringify(args, replacer, 2), opts.outputData ?? result);
+          } else {
+            spanInst.setIO(opts.inputData, opts.outputData ?? result);
+          }
           tracer.endSpan(spanInst);
           return result;
         } catch (err: any) {
@@ -72,7 +85,9 @@ export function withSpan<T>(opts: SpanOptions, fn: () => Promise<T> | T): Promis
     if (result && typeof (result as any).then === 'function') {
       return (result as Promise<T>)
         .then((res) => {
-          spanInst.setIO(opts.inputData, opts.outputData ?? res);
+          if (opts.inputData !== undefined) {
+            spanInst.setIO(opts.inputData, opts.outputData ?? res);
+          }
           tracer.endSpan(spanInst);
           return res;
         })
@@ -82,7 +97,9 @@ export function withSpan<T>(opts: SpanOptions, fn: () => Promise<T> | T): Promis
           throw err;
         });
     }
-    spanInst.setIO(opts.inputData, opts.outputData ?? result);
+    if (opts.inputData !== undefined) {
+      spanInst.setIO(opts.inputData, opts.outputData ?? result);
+    }
     tracer.endSpan(spanInst);
     return result as T;
   } catch (err: any) {
@@ -90,4 +107,11 @@ export function withSpan<T>(opts: SpanOptions, fn: () => Promise<T> | T): Promis
     tracer.endSpan(spanInst);
     throw err;
   }
+}
+
+// util replacer to avoid circular
+function replacer(_key: string, value: unknown) {
+  if (typeof value === 'bigint') return value.toString();
+  if (typeof value === 'function') return `[Function ${value.name || 'anonymous'}]`;
+  return value;
 } 

@@ -24,3 +24,25 @@ hello('world');
 Everything will be flushed automatically or on `process.exit`.
 
 > ☞ Only the **observability** surface is implemented right now. Datasets, experiments and CLI helpers will join in future releases.
+
+## Development
+
+To test the SDK locally during development, we use `npm link`:
+
+1. Build and link the SDK:
+
+   ```bash
+   npm install
+   npm run build
+   npm link
+   ```
+
+2. Check out the `zeroeval-ts-sdk-examples` directory for examples and testing instructions.
+
+### Watch Mode
+
+For active development, use watch mode to automatically rebuild on changes:
+
+```bash
+npm run watch
+```
