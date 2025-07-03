@@ -7,6 +7,10 @@
     "declarationDir": "./dist/types",
     "outDir": "./dist/esm",
     "rootDir": "./src",
+    "baseUrl": ".",
+    "paths": {
+      "@zeroeval/sdk": ["./src/index.ts"]
+    },
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

@@ -491,11 +491,12 @@ var init_utils = __esm({
 });
 
 // src/observability/Tracer.ts
-var import_async_hooks, import_timers, als, Tracer, tracer;
+var import_async_hooks, import_crypto2, import_timers, als, Tracer, tracer;
 var init_Tracer = __esm({
   "src/observability/Tracer.ts"() {
     "use strict";
     import_async_hooks = require("async_hooks");
+    import_crypto2 = require("crypto");
     init_Span();
     init_writer();
     import_timers = require("timers");
@@ -551,7 +552,7 @@ var init_Tracer = __esm({
           span2.sessionName = parent.sessionName;
           span2.tags = { ...parent.tags, ...opts.tags };
         } else {
-          span2.sessionId = opts.sessionId ?? require("crypto").randomUUID();
+          span2.sessionId = opts.sessionId ?? (0, import_crypto2.randomUUID)();
           span2.sessionName = opts.sessionName;
           span2.tags = { ...opts.tags };
         }

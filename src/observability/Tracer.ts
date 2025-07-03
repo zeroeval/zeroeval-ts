@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'async_hooks';
+import { randomUUID } from 'crypto';
 import { Span } from './Span';
 import { SpanWriter, BackendSpanWriter } from './writer';
 import { setInterval } from 'timers';
@@ -76,7 +77,7 @@ export class Tracer {
       // inherit tags
       span.tags = { ...parent.tags, ...opts.tags };
     } else {
-      span.sessionId = opts.sessionId ?? require('crypto').randomUUID();
+      span.sessionId = opts.sessionId ?? randomUUID();
       span.sessionName = opts.sessionName;
       span.tags = { ...opts.tags };
     }
