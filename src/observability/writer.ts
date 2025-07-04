@@ -19,12 +19,38 @@ export class BackendSpanWriter implements SpanWriter {
     const apiKey = this.getApiKey();
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
+    const payload = spans.map((s: any) => {
+      const base = typeof s.toJSON === 'function' ? s.toJSON() : s;
+      return {
+        id: base.span_id,
+        session_id: base.session_id,
+        trace_id: base.trace_id,
+        parent_span_id: base.parent_id,
+        name: base.name,
+        started_at: base.start_time,
+        ended_at: base.end_time,
+        duration_ms: base.duration_ms,
+        attributes: base.attributes,
+        status: base.status,
+        input_data: base.input_data,
+        output_data: base.output_data,
+        code: base.code ?? base.attributes?.code,
+        code_filepath: base.code_filepath ?? base.attributes?.code_filepath,
+        code_lineno: base.code_lineno ?? base.attributes?.code_lineno,
+        error_code: base.error_code,
+        error_message: base.error_message,
+        error_stack: String(base.error_stack ?? ''),
+        tags: base.tags,
+        trace_tags: base.trace_tags,
+        session_tags: base.session_tags,
+      };
+    });
+
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const res = await fetch(endpoint, {
         method: 'POST',
         headers,
-        body: JSON.stringify(spans.map((s) => (typeof s.toJSON === 'function' ? s.toJSON() : s))),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
