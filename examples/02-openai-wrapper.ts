@@ -1,27 +1,20 @@
 /* eslint-disable no-console */
 
-// Example demonstrating the new OpenAI wrapper approach
+// Example demonstrating the OpenAI wrapper approach
 //
-// Run with explicit initialization:
-//   npm run example:openai
+// Simplest usage with environment variables:
+//   OPENAI_API_KEY=your-openai-key ZEROEVAL_API_KEY=your-zeroeval-key npm run example:openai
 //
-// Or with auto-initialization via environment variable (no ze.init needed):
-//   ZEROEVAL_API_KEY=your-key npm run example:openai
-//
-// The wrapper will automatically initialize the SDK if ZEROEVAL_API_KEY is set
+// The OpenAI client automatically uses OPENAI_API_KEY from environment
+// The ZeroEval wrapper automatically uses ZEROEVAL_API_KEY from environment
 
 import { OpenAI } from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import * as ze from '@zeroeval/sdk';
 
-async function main() {
-  // Create a wrapped OpenAI client
-  const openai = ze.wrapOpenAI(
-    new OpenAI({
-      apiKey: "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",
-    })
-  );
+const openai = ze.wrapOpenAI(new OpenAI());
 
+async function main() {
   // Example 1: Basic chat completion (non-streaming)
   console.log('Example 1: Basic chat completion');
   try {
@@ -118,5 +111,6 @@ async function main() {
 // Run the examples
 main().catch((err) => {
   console.error('Error running examples:', err);
+  // @ts-ignore
   process.exitCode = 1;
 }); 

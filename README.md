@@ -33,11 +33,11 @@ The SDK provides a wrapper function to automatically trace OpenAI API calls:
 import { OpenAI } from "openai";
 import { wrapOpenAI } from "@zeroeval/sdk";
 
-// Option 1: Auto-initialize with environment variable
-// Set ZEROEVAL_API_KEY in your environment, then just wrap
-const openai = wrapOpenAI(new OpenAI({ apiKey: "your-openai-key" }));
+// Simplest: Both SDKs use environment variables
+// Set OPENAI_API_KEY and ZEROEVAL_API_KEY in your environment
+const openai = wrapOpenAI(new OpenAI());
 
-// Option 2: Explicit initialization
+// Or with explicit initialization for more control:
 import * as ze from "@zeroeval/sdk";
 ze.init({ apiKey: "your-zeroeval-key" });
 const openai = wrapOpenAI(new OpenAI({ apiKey: "your-openai-key" }));
