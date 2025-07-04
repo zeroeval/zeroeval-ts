@@ -22,7 +22,8 @@
     "build": "tsup src/index.ts --format esm,cjs --dts",
     "watch": "tsup src/index.ts --format esm,cjs --dts --watch",
     "example:basic": "npm run build && npx ts-node --esm examples/01-basic.ts",
-    "example:basic-no-decorators": "npm run build && npx ts-node --esm examples/01-basic-no-decorators.ts"
+    "example:basic-no-decorators": "npm run build && npx ts-node --esm examples/01-basic-no-decorators.ts",
+    "example:openai": "npm run build && npx ts-node --esm examples/02-openai-wrapper.ts"
   },
   "peerDependencies": {
     "openai": "^4",

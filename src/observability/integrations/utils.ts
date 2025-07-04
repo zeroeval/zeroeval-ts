@@ -4,12 +4,7 @@ import type { Integration } from './base';
 export async function discoverIntegrations(): Promise<Record<string, new () => Integration>> {
   const integrations: Record<string, new () => Integration> = {};
 
-  // Dynamically import only if packages are resolvable; wrap in try/catch to avoid startup cost.
-  try {
-    await import('openai');
-    const { OpenAIIntegration } = await import('./openai');
-    integrations.openai = OpenAIIntegration;
-  } catch (_) {}
+  // Note: OpenAI integration is now handled via the wrapOpenAI function instead of monkey patching
 
   try {
     await import('langchain');

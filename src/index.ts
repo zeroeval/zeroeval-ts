@@ -13,4 +13,5 @@ export {
   getCurrentTrace,
   getCurrentSession,
   setTag,
-} from './helpers'; 
+} from './helpers';
+export { wrapOpenAI } from './observability/integrations/openaiWrapper'; 

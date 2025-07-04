@@ -25,6 +25,50 @@ Everything will be flushed automatically or on `process.exit`.
 
 > ☞ Only the **observability** surface is implemented right now. Datasets, experiments and CLI helpers will join in future releases.
 
+## OpenAI Integration
+
+The SDK provides a wrapper function to automatically trace OpenAI API calls:
+
+```ts
+import { OpenAI } from "openai";
+import { wrapOpenAI } from "@zeroeval/sdk";
+
+// Option 1: Auto-initialize with environment variable
+// Set ZEROEVAL_API_KEY in your environment, then just wrap
+const openai = wrapOpenAI(new OpenAI({ apiKey: "your-openai-key" }));
+
+// Option 2: Explicit initialization
+import * as ze from "@zeroeval/sdk";
+ze.init({ apiKey: "your-zeroeval-key" });
+const openai = wrapOpenAI(new OpenAI({ apiKey: "your-openai-key" }));
+
+// Use the client normally - all calls will be traced
+const completion = await openai.chat.completions.create({
+  model: "gpt-4",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+
+// Streaming is also supported
+const stream = await openai.chat.completions.create({
+  model: "gpt-4",
+  messages: [{ role: "user", content: "Tell me a story" }],
+  stream: true,
+});
+
+for await (const chunk of stream) {
+  // Process chunks - they're automatically traced
+}
+```
+
+The wrapper approach provides better TypeScript support compared to monkey patching and traces:
+
+- Chat completions (streaming and non-streaming)
+- Embeddings
+- Images (generation, edit, variations)
+- Audio (transcriptions, translations)
+- Token usage information
+- Errors and retries
+
 ## Development
 
 Local examples are included in the `examples/` folder and runnable via npm scripts.
