@@ -27,22 +27,20 @@ Everything will be flushed automatically or on `process.exit`.
 
 ## Development
 
-To test the SDK locally during development, we use `npm link`:
+Local examples are included in the `examples/` folder and runnable via npm scripts.
 
-1. Build and link the SDK:
+1. Install dependencies and build once:
 
    ```bash
    npm install
-   npm run build
-   npm link
+   npm run build    # optional – scripts rebuild automatically
    ```
 
-2. Check out the `zeroeval-ts-sdk-examples` directory for examples and testing instructions.
+2. Run an example:
 
-### Watch Mode
+   ```bash
+   npm run example:basic               # Decorator-based example
+   npm run example:basic-no-decorators # Non-decorator example
+   ```
 
-For active development, use watch mode to automatically rebuild on changes:
-
-```bash
-npm run watch
-```
+The example scripts rebuild the SDK before execution, so you can omit the manual `npm run build` step during active development if you prefer.
