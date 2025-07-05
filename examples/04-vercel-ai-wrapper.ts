@@ -106,8 +106,9 @@ async function main() {
             },
             required: ['location'],
           }),
-          execute: async ({ location }) => {
+          execute: async (args) => {
             // Mock weather API
+            const { location } = args as { location: string };
             return {
               location,
               temperature: 72,
