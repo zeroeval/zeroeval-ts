@@ -165,15 +165,28 @@ function wrapCompletionsCreate(originalMethod: Function): Function {
   return async function wrappedCreate(...args: any[]) {
     const [params] = args;
     const isStreaming = !!params?.stream;
+    const startTime = Date.now() / 1000; // Convert to seconds for consistency with Python
+    
+    // Enable usage tracking for streaming on OpenAI-native models
+    if (isStreaming && params?.model && typeof params.model === 'string' && !params.model.includes('/')) {
+      params.stream_options = { include_usage: true };
+    }
+    
+    // Serialize messages for attributes
+    const serializedMessages = params?.messages ? 
+      params.messages.map((msg: any) => ({
+        role: msg.role,
+        content: msg.content
+      })) : [];
     
     const span = tracer.startSpan('openai.chat.completions.create', {
       attributes: {
+        'service.name': 'openai',
+        kind: 'llm',
         provider: 'openai',
         model: params?.model,
+        messages: serializedMessages,
         streaming: isStreaming,
-        temperature: params?.temperature,
-        max_tokens: params?.max_tokens,
-        messages_count: Array.isArray(params?.messages) ? params.messages.length : 0,
       },
       tags: { integration: 'openai' },
     });
@@ -184,21 +197,26 @@ function wrapCompletionsCreate(originalMethod: Function): Function {
       // Handle streaming responses
       if (isStreaming && result && typeof result[Symbol.asyncIterator] === 'function') {
         // Return a wrapped stream that traces chunks
-        return wrapStream(result, span, params);
+        return wrapStream(result, span, serializedMessages, startTime);
       }
       
       // Handle non-streaming responses
       if (!isStreaming && result) {
-        const output = result.choices?.[0]?.message?.content || 
-                      JSON.stringify(result.choices?.[0]?.message);
-        span.setIO(JSON.stringify(params), output);
+        const elapsed = Date.now() / 1000 - startTime;
+        const output = result.choices?.[0]?.message?.content || '';
         
         // Add usage information if available
         if (result.usage) {
-          span.attributes.prompt_tokens = result.usage.prompt_tokens;
-          span.attributes.completion_tokens = result.usage.completion_tokens;
-          span.attributes.total_tokens = result.usage.total_tokens;
+          span.attributes.inputTokens = result.usage.prompt_tokens;
+          span.attributes.outputTokens = result.usage.completion_tokens;
         }
+        
+        // Calculate throughput
+        const throughput = output.length > 0 && elapsed > 0 ? 
+          Math.round((output.length / elapsed) * 100) / 100 : 0;
+        span.attributes.throughput = throughput;
+        
+        span.setIO(JSON.stringify(serializedMessages), output);
       }
       
       tracer.endSpan(span);
@@ -222,8 +240,16 @@ function wrapGenericMethod(originalMethod: Function, spanName: string): Function
   return async function wrappedMethod(...args: any[]) {
     const [params] = args;
     
+    // Determine the kind based on the span name
+    let kind = 'operation';
+    if (spanName.includes('embeddings')) {
+      kind = 'embedding';
+    }
+    
     const span = tracer.startSpan(spanName, {
       attributes: {
+        'service.name': 'openai',
+        kind,
         provider: 'openai',
         ...(params?.model && { model: params.model }),
       },
@@ -263,31 +289,45 @@ function wrapGenericMethod(originalMethod: Function, spanName: string): Function
 /**
  * Wraps a streaming response to trace chunks
  */
-async function* wrapStream(stream: AsyncIterable<any>, span: any, params: any): AsyncIterable<any> {
+async function* wrapStream(stream: AsyncIterable<any>, span: any, serializedMessages: any, startTime: number): AsyncIterable<any> {
   const chunks: any[] = [];
   let errorOccurred = false;
+  let firstTokenTime: number | null = null;
+  let fullResponse = '';
   
   try {
     for await (const chunk of stream) {
+      // Check for usage-only chunks (final chunk with token counts)
+      if (!chunk.choices && chunk.usage) {
+        span.attributes.inputTokens = chunk.usage.prompt_tokens;
+        span.attributes.outputTokens = chunk.usage.completion_tokens;
+        chunks.push(chunk);
+        yield chunk;
+        continue;
+      }
+      
+      // Process content chunks
+      if (chunk.choices?.[0]?.delta?.content) {
+        const content = chunk.choices[0].delta.content;
+        if (firstTokenTime === null) {
+          firstTokenTime = Date.now() / 1000;
+          // Time to first token (latency)
+          span.attributes.latency = Math.round((firstTokenTime - startTime) * 10000) / 10000;
+        }
+        fullResponse += content;
+      }
+      
       chunks.push(chunk);
       yield chunk;
     }
     
-    // After stream completes, aggregate the chunks for tracing
-    const fullContent = chunks
-      .map(chunk => chunk.choices?.[0]?.delta?.content || '')
-      .filter(content => content)
-      .join('');
+    // Calculate throughput
+    const elapsed = Date.now() / 1000 - startTime;
+    const throughput = fullResponse.length > 0 && elapsed > 0 ? 
+      Math.round((fullResponse.length / elapsed) * 100) / 100 : 0;
+    span.attributes.throughput = throughput;
     
-    span.setIO(JSON.stringify(params), fullContent || 'Stream completed');
-    
-    // Try to get usage from the last chunk
-    const lastChunk = chunks[chunks.length - 1];
-    if (lastChunk?.usage) {
-      span.attributes.prompt_tokens = lastChunk.usage.prompt_tokens;
-      span.attributes.completion_tokens = lastChunk.usage.completion_tokens;
-      span.attributes.total_tokens = lastChunk.usage.total_tokens;
-    }
+    span.setIO(JSON.stringify(serializedMessages), fullResponse);
   } catch (error: any) {
     errorOccurred = true;
     span.setError({
