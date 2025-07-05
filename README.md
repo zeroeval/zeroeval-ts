@@ -72,6 +72,32 @@ The wrapper approach provides better TypeScript support compared to monkey patch
 - Token usage information
 - Errors and retries
 
+## LangChain Integration
+
+The SDK provides seamless integration with LangChain and LangGraph through a callback handler:
+
+```ts
+import { init } from "@zeroeval/sdk";
+import {
+  ZeroEvalCallbackHandler,
+  setGlobalHandler,
+} from "@zeroeval/sdk/langchain";
+
+// Initialize ZeroEval
+init({ apiKey: "your-api-key" });
+
+// Set up global tracing for all LangChain operations
+setGlobalHandler(
+  new ZeroEvalCallbackHandler({
+    sessionName: "My LangChain App",
+  })
+);
+
+// Now all LangChain/LangGraph operations are automatically traced!
+```
+
+See [README_LANGCHAIN.md](README_LANGCHAIN.md) for detailed documentation on the LangChain integration.
+
 ## Development
 
 Local examples are included in the `examples/` folder and runnable via npm scripts.
@@ -88,6 +114,8 @@ Local examples are included in the `examples/` folder and runnable via npm scrip
    ```bash
    npm run example:basic               # Decorator-based example
    npm run example:basic-no-decorators # Non-decorator example
+   npm run example:openai              # OpenAI wrapper example
+   npm run example:langchain           # LangChain integration example
    ```
 
 The example scripts rebuild the SDK before execution, so you can omit the manual `npm run build` step during active development if you prefer.
