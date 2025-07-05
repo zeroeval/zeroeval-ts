@@ -4,8 +4,6 @@
 
 For full documentation visit https://docs.zeroeval.com.
 
----
-
 ## Features
 
 • **Span decorator & tracer API** – instrument any function with a single line and capture sessions, traces and spans easily.
@@ -22,8 +20,6 @@ For full documentation visit https://docs.zeroeval.com.
 | **Datasets**      | ⚠️ WIP         | ✅ Supported |
 | **Experiments**   | ⚠️ WIP         | ✅ Supported |
 
----
-
 ## Installation
 
 ```bash
@@ -38,8 +34,6 @@ npm install ai @ai-sdk/openai
 npm install langchain
 ```
 
----
-
 ## Authentication
 
 1. **Environment variable** (recommended)
@@ -53,8 +47,6 @@ npm install langchain
    ```
 
 The SDK auto-initialises on first span if `ZEROEVAL_API_KEY` is set.
-
----
 
 ## Quick-start
 
@@ -73,8 +65,6 @@ const completion = await openai.chat.completions.create({
 });
 console.log(completion.choices[0].message.content);
 ```
-
----
 
 ## Integrations
 
@@ -100,8 +90,6 @@ import {
 setGlobalCallbackHandler(new ZeroEvalCallbackHandler());
 ```
 
----
-
 ### Vercel AI SDK
 
 ```ts
@@ -115,8 +103,6 @@ const result = await wrappedAI.generateText({
   prompt: "Hello, world!",
 });
 ```
-
----
 
 ## License
 
