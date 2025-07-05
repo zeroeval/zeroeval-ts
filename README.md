@@ -77,21 +77,13 @@ The wrapper approach provides better TypeScript support compared to monkey patch
 The SDK provides seamless integration with LangChain and LangGraph through a callback handler:
 
 ```ts
-import { init } from "@zeroeval/sdk";
 import {
   ZeroEvalCallbackHandler,
   setGlobalHandler,
 } from "@zeroeval/sdk/langchain";
 
-// Initialize ZeroEval
-init({ apiKey: "your-api-key" });
-
 // Set up global tracing for all LangChain operations
-setGlobalHandler(
-  new ZeroEvalCallbackHandler({
-    sessionName: "My LangChain App",
-  })
-);
+setGlobalHandler(new ZeroEvalCallbackHandler());
 
 // Now all LangChain/LangGraph operations are automatically traced!
 ```
