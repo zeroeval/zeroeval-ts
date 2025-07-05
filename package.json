@@ -1,0 +1,107 @@
+{
+  "name": "zeroeval",
+  "version": "0.1.3",
+  "description": "ZeroEval TypeScript SDK",
+  "keywords": [
+    "observability",
+    "tracing",
+    "monitoring",
+    "langchain",
+    "openai",
+    "ai",
+    "sdk",
+    "analytics"
+  ],
+  "homepage": "https://zeroeval.com",
+  "bugs": {
+    "url": "https://github.com/zeroeval/zeroeval-ts/issues"
+  },
+  "license": "Apache-2.0",
+  "author": [
+    {
+      "name": "Sebastian Crossa",
+      "email": "seb@zeroeval.com",
+      "url": "https://github.com/sebastiancrossa"
+    },
+    {
+      "name": "Jonathan Chavez",
+      "email": "jona@zeroeval.com",
+      "url": "https://github.com/JonathanChavezTamales"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zeroeval/zeroeval-ts.git",
+    "directory": "zeroeval-ts"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./langchain": {
+      "import": "./dist/langchain.js",
+      "require": "./dist/langchain.cjs",
+      "types": "./dist/langchain.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsup src/index.ts src/langchain.ts --format esm,cjs --dts",
+    "watch": "tsup src/index.ts src/langchain.ts --format esm,cjs --dts --watch",
+    "example:basic": "npm run build && npx ts-node --esm examples/01-basic.ts",
+    "example:basic-no-decorators": "npm run build && npx ts-node --esm examples/01-basic-no-decorators.ts",
+    "example:openai": "npm run build && npx ts-node --esm examples/02-openai-wrapper.ts",
+    "example:langchain": "npm run build && npx ts-node --esm examples/03-langchain-integration.ts",
+    "example:vercel-ai": "npm run build && npx ts-node --esm examples/04-vercel-ai-wrapper.ts",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "peerDependencies": {
+    "@ai-sdk/openai": "^1.3.22",
+    "@langchain/core": "^0.3.62",
+    "@langchain/langgraph": "^0.3.6",
+    "ai": "^4.3.16",
+    "langchain": "^0.3.29",
+    "openai": "^5.8.2"
+  },
+  "peerDependenciesMeta": {
+    "@ai-sdk/openai": {
+      "optional": true
+    },
+    "@langchain/core": {
+      "optional": true
+    },
+    "@langchain/langgraph": {
+      "optional": true
+    },
+    "ai": {
+      "optional": true
+    },
+    "langchain": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.4",
+    "rimraf": "^5.0.0",
+    "ts-node": "^10.9.2",
+    "tsup": "^7.2.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {}
+}
