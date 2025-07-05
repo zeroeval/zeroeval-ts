@@ -21,8 +21,6 @@ import { Span } from "../../Span";
 export interface ZeroEvalCallbackHandlerOptions {
   debug?: boolean;
   excludeMetadataProps?: RegExp;
-  sessionId?: string;
-  sessionName?: string;
 }
 
 export class ZeroEvalCallbackHandler
@@ -44,8 +42,6 @@ export class ZeroEvalCallbackHandler
       excludeMetadataProps:
         options?.excludeMetadataProps ??
         /^(l[sc]_|langgraph_|__pregel_|checkpoint_ns)/,
-      sessionId: options?.sessionId,
-      sessionName: options?.sessionName,
     };
   }
 
@@ -86,8 +82,6 @@ export class ZeroEvalCallbackHandler
         ...this.cleanMetadata(metadata),
         ...(this.options.debug ? { runId, parentRunId } : {}),
       },
-      sessionId: this.options.sessionId,
-      sessionName: this.options.sessionName,
       tags: {
         integration: "langchain",
         ...(type ? { [`langchain.${type}`]: "true" } : {}),

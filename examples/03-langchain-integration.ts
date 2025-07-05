@@ -10,14 +10,7 @@ import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 
-// Create and set the global callback handler
-const zeroEvalHandler = new ZeroEvalCallbackHandler({
-  sessionName: 'LangGraph Weather Agent Example',
-  debug: true,
-});
-
-// Set the handler globally - it will be automatically used by all LangChain/LangGraph components
-setGlobalHandler(zeroEvalHandler);
+setGlobalHandler(new ZeroEvalCallbackHandler());
 
 // Define the state for our graph
 interface AgentState {
@@ -107,7 +100,7 @@ async function main() {
       {
         callbacks: [
           new ZeroEvalCallbackHandler({
-            sessionName: 'Specific Invocation',
+            debug: false,
           }),
         ],
       }
