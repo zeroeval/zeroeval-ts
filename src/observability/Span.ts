@@ -23,8 +23,8 @@ export class Span {
   traceTags: Record<string, string> = {};
   sessionTags: Record<string, string> = {};
 
-  inputData?: unknown;
-  outputData?: unknown;
+  inputData?: string;
+  outputData?: string;
 
   error?: ErrorInfo;
   status: 'ok' | 'error' = 'ok';
@@ -48,8 +48,12 @@ export class Span {
   }
 
   setIO(input?: unknown, output?: unknown): void {
-    if (input !== undefined) this.inputData = input;
-    if (output !== undefined) this.outputData = output;
+    if (input !== undefined) {
+      this.inputData = typeof input === 'string' ? input : JSON.stringify(input);
+    }
+    if (output !== undefined) {
+      this.outputData = typeof output === 'string' ? output : JSON.stringify(output);
+    }
   }
 
   toJSON(): Record<string, unknown> {

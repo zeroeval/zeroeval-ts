@@ -37,9 +37,13 @@ export function span(opts: SpanOptions): MethodDecorator & ((target: any, ...arg
               .then((r: any) => {
                 // capture args if inputData not provided
                 if (opts.inputData === undefined) {
-                  spanInst.setIO(JSON.stringify(args, replacer, 2), opts.outputData ?? r);
+                  const output = opts.outputData !== undefined ? 
+                    (typeof opts.outputData === 'string' ? opts.outputData : JSON.stringify(opts.outputData, replacer, 2)) :
+                    (typeof r === 'string' ? r : JSON.stringify(r, replacer, 2));
+                  spanInst.setIO(JSON.stringify(args, replacer, 2), output);
                 } else {
-                  spanInst.setIO(opts.inputData, opts.outputData ?? r);
+                  const output = opts.outputData !== undefined ? opts.outputData : r;
+                  spanInst.setIO(opts.inputData, output);
                 }
                 tracer.endSpan(spanInst);
                 return r;
@@ -52,9 +56,13 @@ export function span(opts: SpanOptions): MethodDecorator & ((target: any, ...arg
           }
           // sync path
           if (opts.inputData === undefined) {
-            spanInst.setIO(JSON.stringify(args, replacer, 2), opts.outputData ?? result);
+            const output = opts.outputData !== undefined ? 
+              (typeof opts.outputData === 'string' ? opts.outputData : JSON.stringify(opts.outputData, replacer, 2)) :
+              (typeof result === 'string' ? result : JSON.stringify(result, replacer, 2));
+            spanInst.setIO(JSON.stringify(args, replacer, 2), output);
           } else {
-            spanInst.setIO(opts.inputData, opts.outputData ?? result);
+            const output = opts.outputData !== undefined ? opts.outputData : result;
+            spanInst.setIO(opts.inputData, output);
           }
           tracer.endSpan(spanInst);
           return result;
@@ -85,8 +93,9 @@ export function withSpan<T>(opts: SpanOptions, fn: () => Promise<T> | T): Promis
     if (result && typeof (result as any).then === 'function') {
       return (result as Promise<T>)
         .then((res) => {
-          if (opts.inputData !== undefined) {
-            spanInst.setIO(opts.inputData, opts.outputData ?? res);
+          if (opts.inputData !== undefined || opts.outputData !== undefined) {
+            const output = opts.outputData !== undefined ? opts.outputData : res;
+            spanInst.setIO(opts.inputData, output);
           }
           tracer.endSpan(spanInst);
           return res;
@@ -97,8 +106,9 @@ export function withSpan<T>(opts: SpanOptions, fn: () => Promise<T> | T): Promis
           throw err;
         });
     }
-    if (opts.inputData !== undefined) {
-      spanInst.setIO(opts.inputData, opts.outputData ?? result);
+    if (opts.inputData !== undefined || opts.outputData !== undefined) {
+      const output = opts.outputData !== undefined ? opts.outputData : result;
+      spanInst.setIO(opts.inputData, output);
     }
     tracer.endSpan(spanInst);
     return result as T;

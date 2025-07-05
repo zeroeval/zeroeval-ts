@@ -16,4 +16,10 @@ export {
 } from './helpers';
 export { wrap } from './observability/integrations/wrapper';
 // Keep wrapOpenAI for backward compatibility
-export { wrapOpenAI } from './observability/integrations/openaiWrapper'; 
+export { wrapOpenAI } from './observability/integrations/openaiWrapper';
+// Export wrapVercelAI for direct usage
+export { wrapVercelAI } from './observability/integrations/vercelAIWrapper';
+export { Span } from './observability/Span';
+
+// Integrations
+export { LangChainIntegration } from './observability/integrations/langchain'; 

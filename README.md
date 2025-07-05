@@ -62,6 +62,7 @@ for await (const chunk of stream) {
 The `ze.wrap()` function automatically detects the client type and applies the appropriate tracing. Currently supported:
 
 - **OpenAI** - Full support for chat completions, embeddings, images, audio, streaming, and token usage
+- **Vercel AI SDK** - Full support for generateText, streamText, generateObject, embed, and more
 
 The wrapper approach provides better TypeScript support compared to monkey patching and traces:
 
@@ -71,6 +72,62 @@ The wrapper approach provides better TypeScript support compared to monkey patch
 - Audio (transcriptions, translations)
 - Token usage information
 - Errors and retries
+
+## Vercel AI SDK Integration
+
+The SDK also supports wrapping the Vercel AI SDK for automatic tracing:
+
+```ts
+import * as ai from "ai";
+import { openai } from "@ai-sdk/openai";
+import * as ze from "@zeroeval/sdk";
+
+// Wrap the entire AI SDK module
+const wrappedAI = ze.wrap(ai);
+
+// Generate text with automatic tracing
+const { text, usage } = await wrappedAI.generateText({
+  model: openai("gpt-4"),
+  prompt: "Write a haiku about TypeScript.",
+});
+
+// Stream text with chunk-level tracing
+const { textStream } = await wrappedAI.streamText({
+  model: openai("gpt-4"),
+  messages: [{ role: "user", content: "Tell me a story" }],
+});
+
+for await (const chunk of textStream) {
+  // Each chunk is traced automatically
+}
+
+// Generate structured objects
+const { object } = await wrappedAI.generateObject({
+  model: openai("gpt-4"),
+  schema: ai.jsonSchema({
+    type: "object",
+    properties: {
+      name: { type: "string" },
+      age: { type: "number" },
+    },
+  }),
+  prompt: "Generate a person profile.",
+});
+
+// Create embeddings
+const { embedding } = await wrappedAI.embed({
+  model: openai.embedding("text-embedding-3-small"),
+  value: "TypeScript is great!",
+});
+```
+
+The Vercel AI SDK wrapper traces:
+
+- All input parameters (model, prompt, messages, tools, etc.)
+- Token usage (input/output tokens)
+- Streaming metrics (chunk count, throughput)
+- Execution time and performance metrics
+- Errors with full context
 
 ## LangChain Integration
 
@@ -82,13 +139,8 @@ import {
   setGlobalHandler,
 } from "@zeroeval/sdk/langchain";
 
-// Set up global tracing for all LangChain operations
 setGlobalHandler(new ZeroEvalCallbackHandler());
-
-// Now all LangChain/LangGraph operations are automatically traced!
 ```
-
-See [README_LANGCHAIN.md](README_LANGCHAIN.md) for detailed documentation on the LangChain integration.
 
 ## Development
 
