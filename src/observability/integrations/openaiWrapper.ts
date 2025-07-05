@@ -1,6 +1,5 @@
 import type { OpenAI } from 'openai';
 import { tracer } from '../Tracer';
-import { init, isInitialized } from '../../init';
 
 type OpenAIClient = InstanceType<typeof OpenAI>;
 
@@ -39,16 +38,6 @@ export function wrapOpenAI<T extends OpenAIClient>(client: T): WrappedOpenAI<T> 
   // Check if already wrapped to avoid double wrapping
   if ((client as WrappedOpenAI<T>).__zeroeval_wrapped) {
     return client as WrappedOpenAI<T>;
-  }
-
-  // Auto-initialize if init hasn't been called yet
-  if (!isInitialized()) {
-    // Check if ZEROEVAL_API_KEY is available in environment
-    const envApiKey = process.env.ZEROEVAL_API_KEY;
-    if (envApiKey) {
-      // Auto-initialize with environment variable
-      init({ apiKey: envApiKey });
-    }
   }
 
   // Create a proxy to intercept method calls

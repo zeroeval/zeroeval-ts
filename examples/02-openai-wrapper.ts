@@ -12,7 +12,7 @@ import { OpenAI } from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import * as ze from '@zeroeval/sdk';
 
-const openai = ze.wrapOpenAI(new OpenAI());
+const openai = ze.wrap(new OpenAI());
 
 async function main() {
   // Example 1: Basic chat completion (non-streaming)
