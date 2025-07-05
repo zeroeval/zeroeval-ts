@@ -9,6 +9,16 @@ export interface InitOptions {
   integrations?: Record<string, boolean>;
 }
 
+// Track whether init has been called
+let initialized = false;
+
+/**
+ * Check if the SDK has been initialized
+ */
+export function isInitialized(): boolean {
+  return initialized;
+}
+
 /**
  * Initialise the SDK. Mirrors `ze.init()` from the Python SDK.
  * Stores credentials in process.env for simplicity; callers may also
@@ -28,4 +38,7 @@ export function init(opts: InitOptions = {}): void {
   if (apiUrl) process.env.ZEROEVAL_API_URL = apiUrl;
 
   tracer.configure({ flushInterval, maxSpans, collectCodeDetails, integrations });
+  
+  // Mark as initialized
+  initialized = true;
 } 

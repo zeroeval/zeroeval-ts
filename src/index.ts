@@ -13,4 +13,7 @@ export {
   getCurrentTrace,
   getCurrentSession,
   setTag,
-} from './helpers'; 
+} from './helpers';
+export { wrap } from './observability/integrations/wrapper';
+// Keep wrapOpenAI for backward compatibility
+export { wrapOpenAI } from './observability/integrations/openaiWrapper'; 
