@@ -1,7 +1,9 @@
 import type { SignalCreate, BulkSignalsCreate, SignalResponse } from './signals';
 
 export class SignalWriter {
-  private apiUrl = (process.env.ZEROEVAL_API_URL ?? 'https://api.zeroeval.com').replace(/\/$/, '');
+  private getApiUrl(): string {
+    return (process.env.ZEROEVAL_API_URL ?? 'https://api.zeroeval.com').replace(/\/$/, '');
+  }
 
   private getApiKey(): string | undefined {
     return process.env.ZEROEVAL_API_KEY;
@@ -11,7 +13,7 @@ export class SignalWriter {
    * Send a single signal to the backend
    */
   async createSignal(signal: SignalCreate): Promise<SignalResponse> {
-    const endpoint = `${this.apiUrl}/signals/`;
+    const endpoint = `${this.getApiUrl()}/signals/`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -49,7 +51,7 @@ export class SignalWriter {
    * Send multiple signals to the backend in bulk
    */
   async createBulkSignals(signals: SignalCreate[]): Promise<SignalResponse> {
-    const endpoint = `${this.apiUrl}/signals/bulk`;
+    const endpoint = `${this.getApiUrl()}/signals/bulk`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -89,7 +91,7 @@ export class SignalWriter {
    * Get all signals for a specific entity
    */
   async getEntitySignals(entityType: string, entityId: string): Promise<any> {
-    const endpoint = `${this.apiUrl}/signals/entity/${entityType}/${entityId}`;
+    const endpoint = `${this.getApiUrl()}/signals/entity/${entityType}/${entityId}`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };

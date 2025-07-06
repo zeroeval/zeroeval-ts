@@ -1,7 +1,6 @@
 import { signalWriter } from './signalWriter';
 import { convertSignalsForBackend, Signal, SignalCreate } from './signals';
 
-// Dynamic import helper for pending signals to avoid circular deps
 type PendingFns = {
   popPendingTraceSignals: (id: string) => Record<string, Signal> | undefined;
   popPendingSessionSignals: (id: string) => Record<string, Signal> | undefined;
@@ -12,7 +11,9 @@ export interface SpanWriter {
 }
 
 export class BackendSpanWriter implements SpanWriter {
-  private apiUrl = (process.env.ZEROEVAL_API_URL ?? 'https://api.zeroeval.com').replace(/\/$/, '');
+  private getApiUrl(): string {
+    return (process.env.ZEROEVAL_API_URL ?? 'https://api.zeroeval.com').replace(/\/$/, '');
+  }
 
   private getApiKey(): string | undefined {
     return process.env.ZEROEVAL_API_KEY;
@@ -21,7 +22,7 @@ export class BackendSpanWriter implements SpanWriter {
   async write(spans: any[]): Promise<void> {
     if (!spans.length) return;
 
-    const endpoint = `${this.apiUrl}/spans`;
+    const endpoint = `${this.getApiUrl()}/spans`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
