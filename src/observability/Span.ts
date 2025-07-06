@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import type { Signal } from './signals';
 
 export interface ErrorInfo {
   code?: string;
@@ -22,6 +23,7 @@ export class Span {
   tags: Record<string, string> = {};
   traceTags: Record<string, string> = {};
   sessionTags: Record<string, string> = {};
+  signals: Record<string, Signal> = {};
 
   inputData?: string;
   outputData?: string;
@@ -56,6 +58,33 @@ export class Span {
     }
   }
 
+  addSignal(name: string, value: string | boolean | number, type?: 'boolean' | 'numerical'): void {
+    // Auto-detect type if not provided
+    let signalType = type;
+    if (!signalType) {
+      if (typeof value === 'boolean') {
+        signalType = 'boolean';
+      } else if (typeof value === 'number') {
+        signalType = 'numerical';
+      } else {
+        // For strings, try to detect
+        const strVal = String(value).toLowerCase();
+        if (strVal === 'true' || strVal === 'false') {
+          signalType = 'boolean';
+        } else if (!isNaN(Number(value))) {
+          signalType = 'numerical';
+        } else {
+          signalType = 'boolean';
+        }
+      }
+    }
+
+    this.signals[name] = {
+      value,
+      type: signalType
+    };
+  }
+
   toJSON(): Record<string, unknown> {
     return {
       span_id: this.spanId,
@@ -71,6 +100,7 @@ export class Span {
       tags: this.tags,
       trace_tags: this.traceTags,
       session_tags: this.sessionTags,
+      signals: this.signals,
       input_data: this.inputData,
       output_data: this.outputData,
       error_code: this.error?.code,

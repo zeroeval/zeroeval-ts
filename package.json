@@ -66,6 +66,7 @@
     "example:openai": "npm run build && npx ts-node --esm examples/02-openai-wrapper.ts",
     "example:langchain": "npm run build && npx ts-node --esm examples/03-langchain-integration.ts",
     "example:vercel-ai": "npm run build && npx ts-node --esm examples/04-vercel-ai-wrapper.ts",
+    "example:signals": "npm run build && npx ts-node --esm examples/06-signals.ts",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "peerDependencies": {

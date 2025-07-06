@@ -22,4 +22,15 @@ export { wrapVercelAI } from './observability/integrations/vercelAIWrapper';
 export { Span } from './observability/Span';
 
 // Integrations
-export { LangChainIntegration } from './observability/integrations/langchain'; 
+export { LangChainIntegration } from './observability/integrations/langchain';
+
+// Signals API
+export {
+  sendSignal,
+  sendBulkSignals,
+  sendTraceSignal,
+  sendSessionSignal,
+  sendSpanSignal,
+  getEntitySignals,
+} from './signals';
+export type { Signal, SignalCreate } from './observability/signals'; 
