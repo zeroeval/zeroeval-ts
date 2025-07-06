@@ -173,6 +173,18 @@ export class ZeroEvalCallbackHandler
     if (type) attributes.type = type;
     if (tags) attributes.tags = tags;
     
+    if (type === 'llm') {
+      attributes.kind = 'llm';
+      
+      if (attributes.provider === undefined) {
+        attributes.provider = 'openai';
+      }
+      
+      if (attributes['service.name'] === undefined) {
+        attributes['service.name'] = attributes.provider;
+      }
+    }
+    
     if (metadata) {
       for (const [key, value] of Object.entries(metadata)) {
         if (!this.cachedRegex.test(key)) {
@@ -256,6 +268,16 @@ export class ZeroEvalCallbackHandler
       
       Object.assign(span.attributes, additionalAttrs);
       this.metadataPool.release(additionalAttrs);
+    }
+
+    // End the span to get duration, then calculate throughput
+    span.end();
+    
+    // Calculate throughput after ending the span when we have the duration
+    if (span.attributes.outputTokens && span.durationMs && span.durationMs > 0) {
+      const outputTokens = span.attributes.outputTokens as number;
+      // Calculate tokens per second
+      span.attributes.throughput = Math.round((outputTokens / (span.durationMs / 1000)) * 100) / 100;
     }
 
     tracer.endSpan(span);
@@ -370,6 +392,15 @@ export class ZeroEvalCallbackHandler
     const tokenUsage = llmOutput?.tokenUsage || llmOutput?.estimatedTokens || {};
 
     if (tokenUsage.totalTokens || tokenUsage.promptTokens || tokenUsage.completionTokens) {
+      // Set tokens in the format expected by the UI
+      if (tokenUsage.promptTokens) {
+        span.attributes.inputTokens = tokenUsage.promptTokens;
+      }
+      if (tokenUsage.completionTokens) {
+        span.attributes.outputTokens = tokenUsage.completionTokens;
+      }
+      
+      // Also keep the metrics for backward compatibility
       if (!span.attributes.metrics) {
         span.attributes.metrics = {};
       }
@@ -413,6 +444,10 @@ export class ZeroEvalCallbackHandler
     if (invocationParams.tools) {
       normalizedMetadata.tools = invocationParams.tools;
     }
+    
+    // Add messages to metadata for LLM spans to match OpenAI wrapper
+    const flattenedMessages = this.flattenMessagesInputOptimized(messages);
+    normalizedMetadata.messages = flattenedMessages;
 
     this.beginTracerSegment({
       runId,

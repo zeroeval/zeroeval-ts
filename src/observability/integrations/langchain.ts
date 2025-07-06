@@ -45,8 +45,20 @@ export class LangChainIntegration extends Integration {
 
         if (isAsync) {
           return async function patched(this: any, ...args: any[]) {
+            const className = this?.constructor?.name;
+            const attrs: Record<string, unknown> = {
+              class: className,
+              method: String(method),
+            };
+
+            if (typeof className === 'string' && className.includes('ChatOpenAI')) {
+              attrs.kind = 'llm';
+              attrs.provider = 'openai';
+              attrs['service.name'] = 'openai';
+            }
+
             const span = tracer.startSpan(name, {
-              attributes: { class: this?.constructor?.name, method: String(method) },
+              attributes: attrs,
               tags: { integration: 'langchain' },
             });
             try {
@@ -63,8 +75,19 @@ export class LangChainIntegration extends Integration {
         }
 
         return function patched(this: any, ...args: any[]) {
+          const className = this?.constructor?.name;
+          const attrs: Record<string, unknown> = {
+            class: className,
+            method: String(method),
+          };
+          if (typeof className === 'string' && className.includes('ChatOpenAI')) {
+            attrs.kind = 'llm';
+            attrs.provider = 'openai';
+            attrs['service.name'] = 'openai';
+          }
+
           const span = tracer.startSpan(name, {
-            attributes: { class: this?.constructor?.name, method: String(method) },
+            attributes: attrs,
             tags: { integration: 'langchain' },
           });
           try {
