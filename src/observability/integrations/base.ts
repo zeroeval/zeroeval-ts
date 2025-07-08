@@ -9,7 +9,8 @@ export abstract class Integration {
     build: (orig: T[K]) => T[K]
   ): void {
     const orig = obj[key];
-    if (typeof orig !== 'function' || (orig as any)[Integration.PATCHED]) return;
+    if (typeof orig !== 'function' || (orig as any)[Integration.PATCHED])
+      return;
 
     const wrapped = build(orig);
     (wrapped as any)[Integration.PATCHED] = true;
@@ -33,4 +34,4 @@ export abstract class Integration {
   }
 
   abstract setup(): Promise<void> | void;
-} 
+}

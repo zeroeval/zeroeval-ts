@@ -34,4 +34,4 @@ export function setTag(
       tracer.addSessionTags(target, tags);
     }
   }
-} 
+}

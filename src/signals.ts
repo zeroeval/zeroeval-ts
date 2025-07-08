@@ -1,7 +1,14 @@
 import { signalWriter } from './observability/signalWriter';
-import { Signal, SignalCreate, detectSignalType } from './observability/signals';
+import {
+  Signal,
+  SignalCreate,
+  detectSignalType,
+} from './observability/signals';
 import { tracer } from './observability/Tracer';
-import { addPendingTraceSignal, addPendingSessionSignal } from './observability/pendingSignals';
+import {
+  addPendingTraceSignal,
+  addPendingSessionSignal,
+} from './observability/pendingSignals';
 
 /**
  * Send a signal to a specific entity
@@ -23,7 +30,7 @@ export async function sendSignal(
     entity_id: entityId,
     name,
     value,
-    signal_type: signalType || detectSignalType(value)
+    signal_type: signalType || detectSignalType(value),
   };
 
   await signalWriter.createSignal(signal);
@@ -50,7 +57,9 @@ export async function sendTraceSignal(
 ): Promise<void> {
   const currentSpan = tracer.currentSpan();
   if (!currentSpan) {
-    console.warn('[ZeroEval] No active span/trace found for sending trace signal');
+    console.warn(
+      '[ZeroEval] No active span/trace found for sending trace signal'
+    );
     return;
   }
   const sig: Signal = {
@@ -73,7 +82,9 @@ export async function sendSessionSignal(
 ): Promise<void> {
   const currentSpan = tracer.currentSpan();
   if (!currentSpan || !currentSpan.sessionId) {
-    console.warn('[ZeroEval] No active session found for sending session signal');
+    console.warn(
+      '[ZeroEval] No active session found for sending session signal'
+    );
     return;
   }
   const sig: Signal = {
@@ -99,7 +110,7 @@ export async function sendSpanSignal(
     console.warn('[ZeroEval] No active span found for sending span signal');
     return;
   }
-  
+
   // Add signal to span (will be sent when span is flushed)
   currentSpan.addSignal(name, value, signalType);
 }
@@ -115,4 +126,4 @@ export async function getEntitySignals(
   entityId: string
 ): Promise<Signal[]> {
   return await signalWriter.getEntitySignals(entityType, entityId);
-} 
+}

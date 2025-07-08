@@ -54,7 +54,8 @@ export class Tracer {
 
   /* CONFIG ----------------------------------------------------------------*/
   configure(opts: ConfigureOptions = {}) {
-    if (opts.flushInterval !== undefined) this._flushIntervalMs = opts.flushInterval * 1000;
+    if (opts.flushInterval !== undefined)
+      this._flushIntervalMs = opts.flushInterval * 1000;
     if (opts.maxSpans !== undefined) this._maxSpans = opts.maxSpans;
     // Other options ignored for now (collectCodeDetails, integrations)
   }
@@ -66,7 +67,15 @@ export class Tracer {
   }
 
   /* TRACING ---------------------------------------------------------------*/
-  startSpan(name: string, opts: { attributes?: Record<string, unknown>; sessionId?: string; sessionName?: string; tags?: Record<string, string> } = {}): Span {
+  startSpan(
+    name: string,
+    opts: {
+      attributes?: Record<string, unknown>;
+      sessionId?: string;
+      sessionName?: string;
+      tags?: Record<string, string>;
+    } = {}
+  ): Span {
     const parent = this.currentSpan();
     const span = new Span(name, parent?.traceId);
 
@@ -89,7 +98,8 @@ export class Tracer {
     als.enterWith([...parentStack, span]);
 
     // trace bookkeeping
-    this._activeTraceCounts[span.traceId] = (this._activeTraceCounts[span.traceId] || 0) + 1;
+    this._activeTraceCounts[span.traceId] =
+      (this._activeTraceCounts[span.traceId] || 0) + 1;
 
     return span;
   }
@@ -123,17 +133,19 @@ export class Tracer {
   /* TAG HELPERS -----------------------------------------------------------*/
   addTraceTags(traceId: string, tags: Record<string, string>): void {
     // update buckets
-    for (const span of this._traceBuckets[traceId] ?? []) Object.assign(span.tags, tags);
+    for (const span of this._traceBuckets[traceId] ?? [])
+      Object.assign(span.tags, tags);
     // update buffer if spans already flushed there
-    this._buffer.filter((s) => s.traceId === traceId).forEach((s) => Object.assign(s.tags, tags));
+    this._buffer
+      .filter((s) => s.traceId === traceId)
+      .forEach((s) => Object.assign(s.tags, tags));
   }
 
   addSessionTags(sessionId: string, tags: Record<string, string>): void {
-    const all = [
-      ...Object.values(this._traceBuckets).flat(),
-      ...this._buffer,
-    ];
-    all.filter((s) => s.sessionId === sessionId).forEach((s) => Object.assign(s.tags, tags));
+    const all = [...Object.values(this._traceBuckets).flat(), ...this._buffer];
+    all
+      .filter((s) => s.sessionId === sessionId)
+      .forEach((s) => Object.assign(s.tags, tags));
   }
 
   isActiveTrace(traceId: string): boolean {
@@ -180,4 +192,4 @@ export class Tracer {
   }
 }
 
-export const tracer = new Tracer(); 
+export const tracer = new Tracer();

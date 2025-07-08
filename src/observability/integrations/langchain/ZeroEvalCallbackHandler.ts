@@ -1,19 +1,22 @@
-import { BaseCallbackHandler, BaseCallbackHandlerInput } from "@langchain/core/callbacks/base";
-import { AgentAction, AgentFinish } from "@langchain/core/dist/agents";
-import { DocumentInterface } from "@langchain/core/dist/documents/document";
-import { Serialized } from "@langchain/core/dist/load/serializable";
-import { BaseMessage } from "@langchain/core/dist/messages/base";
+import {
+  BaseCallbackHandler,
+  BaseCallbackHandlerInput,
+} from '@langchain/core/callbacks/base';
+import { AgentAction, AgentFinish } from '@langchain/core/dist/agents';
+import { DocumentInterface } from '@langchain/core/dist/documents/document';
+import { Serialized } from '@langchain/core/dist/load/serializable';
+import { BaseMessage } from '@langchain/core/dist/messages/base';
 import {
   ChatGeneration,
   ChatResult,
   Generation,
   LLMResult,
-} from "@langchain/core/dist/outputs";
-import { ChainValues } from "@langchain/core/dist/utils/types";
-import { ToolMessage } from "@langchain/core/messages";
-import { RunnableConfig } from "@langchain/core/runnables";
-import { tracer } from "../../Tracer";
-import { Span } from "../../Span";
+} from '@langchain/core/dist/outputs';
+import { ChainValues } from '@langchain/core/dist/utils/types';
+import { ToolMessage } from '@langchain/core/messages';
+import { RunnableConfig } from '@langchain/core/runnables';
+import { tracer } from '../../Tracer';
+import { Span } from '../../Span';
 
 export interface ZeroEvalCallbackHandlerOptions {
   debug?: boolean;
@@ -56,9 +59,10 @@ class LazySerializer {
 
   toString(): string {
     if (!this.serialized) {
-      this.serialized = typeof this.value === "string" 
-        ? this.value 
-        : JSON.stringify(this.value);
+      this.serialized =
+        typeof this.value === 'string'
+          ? this.value
+          : JSON.stringify(this.value);
     }
     return this.serialized;
   }
@@ -68,16 +72,16 @@ export class ZeroEvalCallbackHandler
   extends BaseCallbackHandler
   implements BaseCallbackHandlerInput
 {
-  name = "ZeroEvalCallbackHandler";
+  name = 'ZeroEvalCallbackHandler';
   private spans: Map<string, Span>;
   private rootRunId?: string;
   private options: Required<ZeroEvalCallbackHandlerOptions>;
-  
+
   private metadataPool: ObjectPool<Record<string, unknown>>;
   private cleanupTimer?: NodeJS.Timeout;
   private spanStartTimes: Map<string, number>;
   private cachedRegex: RegExp;
-  
+
   private static readonly chooseFirst = (...values: unknown[]) => {
     for (const value of values) {
       if (value !== undefined && value !== null) return value;
@@ -103,9 +107,9 @@ export class ZeroEvalCallbackHandler
     this.cachedRegex = this.options.excludeMetadataProps;
 
     this.metadataPool = new ObjectPool<Record<string, unknown>>(
-      () => ({} as Record<string, unknown>),
+      () => ({}) as Record<string, unknown>,
       (obj) => {
-        Object.keys(obj).forEach(key => delete obj[key]);
+        Object.keys(obj).forEach((key) => delete obj[key]);
       }
     );
 
@@ -127,7 +131,9 @@ export class ZeroEvalCallbackHandler
       if (now - startTime > maxAge) {
         const span = this.spans.get(runId);
         if (span) {
-          span.setError({ message: "Span orphaned - auto-cleaned after timeout" });
+          span.setError({
+            message: 'Span orphaned - auto-cleaned after timeout',
+          });
           tracer.endSpan(span);
         }
         this.spans.delete(runId);
@@ -161,7 +167,9 @@ export class ZeroEvalCallbackHandler
     }
 
     if (this.spans.size >= this.options.maxConcurrentSpans) {
-      console.warn(`Max concurrent spans (${this.options.maxConcurrentSpans}) reached`);
+      console.warn(
+        `Max concurrent spans (${this.options.maxConcurrentSpans}) reached`
+      );
       return;
     }
 
@@ -172,19 +180,19 @@ export class ZeroEvalCallbackHandler
     const attributes = this.metadataPool.acquire();
     if (type) attributes.type = type;
     if (tags) attributes.tags = tags;
-    
+
     if (type === 'llm') {
       attributes.kind = 'llm';
-      
+
       if (attributes.provider === undefined) {
         attributes.provider = 'openai';
       }
-      
+
       if (attributes['service.name'] === undefined) {
         attributes['service.name'] = attributes.provider;
       }
     }
-    
+
     if (metadata) {
       for (const [key, value] of Object.entries(metadata)) {
         if (!this.cachedRegex.test(key)) {
@@ -192,14 +200,14 @@ export class ZeroEvalCallbackHandler
         }
       }
     }
-    
+
     if (this.options.debug) {
       attributes.runId = runId;
       attributes.parentRunId = parentRunId;
     }
 
-    const spanTags: Record<string, string> = { integration: "langchain" };
-    if (type) spanTags[`langchain.${type}`] = "true";
+    const spanTags: Record<string, string> = { integration: 'langchain' };
+    if (type) spanTags[`langchain.${type}`] = 'true';
 
     const span = tracer.startSpan(name, {
       attributes,
@@ -213,7 +221,7 @@ export class ZeroEvalCallbackHandler
 
     this.spans.set(runId, span);
     this.spanStartTimes.set(runId, Date.now());
-    
+
     this.metadataPool.release(attributes);
   }
 
@@ -240,7 +248,7 @@ export class ZeroEvalCallbackHandler
 
     this.spans.delete(runId);
     this.spanStartTimes.delete(runId);
-    
+
     if (runId === this.rootRunId) {
       this.rootRunId = undefined;
     }
@@ -257,7 +265,7 @@ export class ZeroEvalCallbackHandler
     if (tags || metadata) {
       const additionalAttrs = this.metadataPool.acquire();
       if (tags) additionalAttrs.tags = tags;
-      
+
       if (metadata) {
         for (const [key, value] of Object.entries(metadata)) {
           if (!this.cachedRegex.test(key)) {
@@ -265,19 +273,24 @@ export class ZeroEvalCallbackHandler
           }
         }
       }
-      
+
       Object.assign(span.attributes, additionalAttrs);
       this.metadataPool.release(additionalAttrs);
     }
 
     // End the span to get duration, then calculate throughput
     span.end();
-    
+
     // Calculate throughput after ending the span when we have the duration
-    if (span.attributes.outputTokens && span.durationMs && span.durationMs > 0) {
+    if (
+      span.attributes.outputTokens &&
+      span.durationMs &&
+      span.durationMs > 0
+    ) {
       const outputTokens = span.attributes.outputTokens as number;
       // Calculate tokens per second
-      span.attributes.throughput = Math.round((outputTokens / (span.durationMs / 1000)) * 100) / 100;
+      span.attributes.throughput =
+        Math.round((outputTokens / (span.durationMs / 1000)) * 100) / 100;
     }
 
     tracer.endSpan(span);
@@ -345,21 +358,25 @@ export class ZeroEvalCallbackHandler
     },
     tags?: string[],
     metadata?: Record<string, unknown>,
-    runName?: string,
+    runName?: string
   ): Promise<void> {
     const normalizedMetadata = metadata ? this.metadataPool.acquire() : {};
-    
+
     if (metadata) Object.assign(normalizedMetadata, metadata);
-    
+
     const invocationParams = extraParams?.invocation_params || {};
-    const callParams = this.normalizeCallParamsOptimized(llm, invocationParams, metadata);
+    const callParams = this.normalizeCallParamsOptimized(
+      llm,
+      invocationParams,
+      metadata
+    );
     Object.assign(normalizedMetadata, callParams);
 
     this.beginTracerSegment({
       runId,
       parentRunId,
-      type: "llm",
-      name: runName ?? this.deriveComponentName(llm, "LLM"),
+      type: 'llm',
+      name: runName ?? this.deriveComponentName(llm, 'LLM'),
       input: prompts,
       tags,
       metadata: normalizedMetadata,
@@ -372,7 +389,7 @@ export class ZeroEvalCallbackHandler
     err: Error,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     if (this.spans.has(runId)) {
       this.finishTracerSegment({ runId, error: err.message, tags });
@@ -383,15 +400,20 @@ export class ZeroEvalCallbackHandler
     output: LLMResult | ChatResult,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     const span = this.spans.get(runId);
     if (!span) return;
 
     const { llmOutput, generations, ...metadata } = output;
-    const tokenUsage = llmOutput?.tokenUsage || llmOutput?.estimatedTokens || {};
+    const tokenUsage =
+      llmOutput?.tokenUsage || llmOutput?.estimatedTokens || {};
 
-    if (tokenUsage.totalTokens || tokenUsage.promptTokens || tokenUsage.completionTokens) {
+    if (
+      tokenUsage.totalTokens ||
+      tokenUsage.promptTokens ||
+      tokenUsage.completionTokens
+    ) {
       // Set tokens in the format expected by the UI
       if (tokenUsage.promptTokens) {
         span.attributes.inputTokens = tokenUsage.promptTokens;
@@ -399,15 +421,17 @@ export class ZeroEvalCallbackHandler
       if (tokenUsage.completionTokens) {
         span.attributes.outputTokens = tokenUsage.completionTokens;
       }
-      
+
       // Also keep the metrics for backward compatibility
       if (!span.attributes.metrics) {
         span.attributes.metrics = {};
       }
       const metrics = span.attributes.metrics as Record<string, unknown>;
       if (tokenUsage.totalTokens) metrics.tokens = tokenUsage.totalTokens;
-      if (tokenUsage.promptTokens) metrics.prompt_tokens = tokenUsage.promptTokens;
-      if (tokenUsage.completionTokens) metrics.completion_tokens = tokenUsage.completionTokens;
+      if (tokenUsage.promptTokens)
+        metrics.prompt_tokens = tokenUsage.promptTokens;
+      if (tokenUsage.completionTokens)
+        metrics.completion_tokens = tokenUsage.completionTokens;
     }
 
     this.finishTracerSegment({
@@ -431,20 +455,24 @@ export class ZeroEvalCallbackHandler
     },
     tags?: string[],
     metadata?: Record<string, unknown>,
-    runName?: string,
+    runName?: string
   ): Promise<void> {
     const normalizedMetadata = this.metadataPool.acquire();
-    
+
     if (metadata) Object.assign(normalizedMetadata, metadata);
-    
+
     const invocationParams = extraParams?.invocation_params || {};
-    const callParams = this.normalizeCallParamsOptimized(llm, invocationParams, metadata);
+    const callParams = this.normalizeCallParamsOptimized(
+      llm,
+      invocationParams,
+      metadata
+    );
     Object.assign(normalizedMetadata, callParams);
-    
+
     if (invocationParams.tools) {
       normalizedMetadata.tools = invocationParams.tools;
     }
-    
+
     // Add messages to metadata for LLM spans to match OpenAI wrapper
     const flattenedMessages = this.flattenMessagesInputOptimized(messages);
     normalizedMetadata.messages = flattenedMessages;
@@ -452,8 +480,8 @@ export class ZeroEvalCallbackHandler
     this.beginTracerSegment({
       runId,
       parentRunId,
-      type: "llm",
-      name: runName ?? this.deriveComponentName(llm, "Chat Model"),
+      type: 'llm',
+      name: runName ?? this.deriveComponentName(llm, 'Chat Model'),
       input: this.flattenMessagesInputOptimized(messages),
       tags,
       metadata: normalizedMetadata,
@@ -470,17 +498,17 @@ export class ZeroEvalCallbackHandler
     tags?: string[],
     metadata?: Record<string, unknown>,
     runType?: string,
-    runName?: string,
+    runName?: string
   ): Promise<void> {
-    if (tags?.includes("langsmith:hidden")) {
+    if (tags?.includes('langsmith:hidden')) {
       return;
     }
 
     this.beginTracerSegment({
       runId,
       parentRunId,
-      type: "chain",
-      name: runName ?? this.deriveComponentName(chain, "Chain"),
+      type: 'chain',
+      name: runName ?? this.deriveComponentName(chain, 'Chain'),
       input: this.normalizeChainInputsOptimized(inputs),
       tags,
       metadata: {
@@ -497,7 +525,7 @@ export class ZeroEvalCallbackHandler
     tags?: string[],
     kwargs?: {
       inputs?: Record<string, unknown>;
-    },
+    }
   ): Promise<void> {
     if (this.spans.has(runId)) {
       this.finishTracerSegment({ runId, error: err.toString(), tags });
@@ -509,13 +537,13 @@ export class ZeroEvalCallbackHandler
     runId: string,
     parentRunId?: string,
     tags?: string[],
-    kwargs?: { inputs?: Record<string, unknown> },
+    kwargs?: { inputs?: Record<string, unknown> }
   ): Promise<void> {
     if (this.spans.has(runId)) {
-      this.finishTracerSegment({ 
-        runId, 
-        tags, 
-        output: this.normalizeChainOutputsOptimized(outputs) 
+      this.finishTracerSegment({
+        runId,
+        tags,
+        output: this.normalizeChainOutputsOptimized(outputs),
       });
     }
   }
@@ -527,13 +555,13 @@ export class ZeroEvalCallbackHandler
     parentRunId?: string,
     tags?: string[],
     metadata?: Record<string, unknown>,
-    runName?: string,
+    runName?: string
   ): Promise<void> {
     this.beginTracerSegment({
       runId,
       parentRunId,
-      type: "tool",
-      name: runName ?? this.deriveComponentName(tool, "Tool"),
+      type: 'tool',
+      name: runName ?? this.deriveComponentName(tool, 'Tool'),
       input: this.parseMaybeJsonOptimized(input),
       tags,
       metadata: {
@@ -547,7 +575,7 @@ export class ZeroEvalCallbackHandler
     err: Error,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     if (this.spans.has(runId)) {
       this.finishTracerSegment({ runId, error: err.message, tags });
@@ -558,13 +586,13 @@ export class ZeroEvalCallbackHandler
     output: unknown,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     if (this.spans.has(runId)) {
-      this.finishTracerSegment({ 
-        runId, 
-        output: this.normalizeToolOutputOptimized(output), 
-        tags 
+      this.finishTracerSegment({
+        runId,
+        output: this.normalizeToolOutputOptimized(output),
+        tags,
       });
     }
   }
@@ -573,12 +601,12 @@ export class ZeroEvalCallbackHandler
     action: AgentAction,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     this.beginTracerSegment({
       runId,
       parentRunId,
-      type: "agent",
+      type: 'agent',
       name: action.tool,
       input: action,
       tags,
@@ -589,7 +617,7 @@ export class ZeroEvalCallbackHandler
     action: AgentFinish,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     if (this.spans.has(runId)) {
       this.finishTracerSegment({ runId, output: action, tags });
@@ -603,13 +631,13 @@ export class ZeroEvalCallbackHandler
     parentRunId?: string,
     tags?: string[],
     metadata?: Record<string, unknown>,
-    name?: string,
+    name?: string
   ): Promise<void> {
     this.beginTracerSegment({
       runId,
       parentRunId,
-      type: "retriever",
-      name: name ?? this.deriveComponentName(retriever, "Retriever"),
+      type: 'retriever',
+      name: name ?? this.deriveComponentName(retriever, 'Retriever'),
       input: query,
       tags,
       metadata: {
@@ -623,7 +651,7 @@ export class ZeroEvalCallbackHandler
     documents: DocumentInterface[],
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     if (this.spans.has(runId)) {
       this.finishTracerSegment({ runId, output: documents, tags });
@@ -634,7 +662,7 @@ export class ZeroEvalCallbackHandler
     err: Error,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     if (this.spans.has(runId)) {
       this.finishTracerSegment({ runId, error: err.message, tags });
@@ -645,27 +673,30 @@ export class ZeroEvalCallbackHandler
   private normalizeCallParamsOptimized(
     llm: Serialized,
     invocationParams: Record<string, unknown>,
-    metadata?: Record<string, unknown>,
+    metadata?: Record<string, unknown>
   ): Record<string, unknown> {
     const args = this.metadataPool.acquire();
-    
+
     const model = ZeroEvalCallbackHandler.chooseFirst(
       invocationParams?.model,
       metadata?.ls_model_name,
       llm.name
     );
     if (model !== undefined) args.model = model;
-    
+
     const temperature = ZeroEvalCallbackHandler.chooseFirst(
       invocationParams?.temperature,
       metadata?.ls_temperature
     );
     if (temperature !== undefined) args.temperature = temperature;
-    
+
     const params: [string, unknown][] = [
       ['top_p', invocationParams?.top_p ?? invocationParams?.topP],
       ['top_k', invocationParams?.top_k ?? invocationParams?.topK],
-      ['max_tokens', invocationParams?.max_tokens ?? invocationParams?.maxOutputTokens],
+      [
+        'max_tokens',
+        invocationParams?.max_tokens ?? invocationParams?.maxOutputTokens,
+      ],
       ['frequency_penalty', invocationParams?.frequency_penalty],
       ['presence_penalty', invocationParams?.presence_penalty],
       ['response_format', invocationParams?.response_format],
@@ -674,23 +705,23 @@ export class ZeroEvalCallbackHandler
       ['n', invocationParams?.n],
       ['stop', invocationParams?.stop ?? invocationParams?.stop_sequence],
     ];
-    
+
     for (const [key, value] of params) {
       if (value !== undefined && value !== null) {
         args[key] = value;
       }
     }
-    
+
     const result = Object.keys(args).length ? { ...args } : invocationParams;
     this.metadataPool.release(args);
     return result;
   }
 
   private flattenGenerationsOptimized(
-    generations: Generation[][] | ChatGeneration[],
+    generations: Generation[][] | ChatGeneration[]
   ): unknown[] {
     const result: unknown[] = [];
-    
+
     for (const batch of generations) {
       if (Array.isArray(batch)) {
         for (const gen of batch) {
@@ -702,12 +733,12 @@ export class ZeroEvalCallbackHandler
         if (parsed !== undefined) result.push(parsed);
       }
     }
-    
+
     return result;
   }
 
   private parseGenOptimized(generation: Generation | ChatGeneration): unknown {
-    if ("message" in generation) {
+    if ('message' in generation) {
       return this.extractMessageContentOptimized(generation.message);
     }
     return generation.text;
@@ -715,38 +746,40 @@ export class ZeroEvalCallbackHandler
 
   private flattenMessagesInputOptimized(messages: BaseMessage[][]): unknown[] {
     const result: unknown[] = [];
-    
+
     for (const batch of messages) {
       for (const message of batch) {
         result.push(this.extractMessageContentOptimized(message));
       }
     }
-    
+
     return result;
   }
 
-  private extractMessageContentOptimized(message: BaseMessage): Record<string, unknown> {
+  private extractMessageContentOptimized(
+    message: BaseMessage
+  ): Record<string, unknown> {
     const result = this.metadataPool.acquire();
-    
+
     result.content = message.content;
-    
+
     const messageType = message._getType();
     let role = message.name ?? messageType;
-    
-    if (messageType === "human") role = "user";
-    else if (messageType === "ai") role = "assistant";
-    else if (messageType === "system") role = "system";
-    
+
+    if (messageType === 'human') role = 'user';
+    else if (messageType === 'ai') role = 'assistant';
+    else if (messageType === 'system') role = 'system';
+
     result.role = role;
-    
+
     const anyMessage = message as any;
     if (anyMessage.tool_calls) result.tool_calls = anyMessage.tool_calls;
     if (anyMessage.status) result.status = anyMessage.status;
     if (anyMessage.artifact) result.artifact = anyMessage.artifact;
-    
+
     const copy = { ...result };
     this.metadataPool.release(result);
-    
+
     return copy;
   }
 
@@ -759,27 +792,27 @@ export class ZeroEvalCallbackHandler
   }
 
   private normalizeToolOutputOptimized(output: unknown | ToolMessage): unknown {
-    return output instanceof ToolMessage 
-      ? this.extractMessageContentOptimized(output) 
+    return output instanceof ToolMessage
+      ? this.extractMessageContentOptimized(output)
       : output;
   }
 
   private normalizeChainOutputsOptimized(output: unknown): unknown {
-    const parsed = (Array.isArray(output) ? output : [output]).map(
-      (item) => this.parseChainElementOptimized(item)
+    const parsed = (Array.isArray(output) ? output : [output]).map((item) =>
+      this.parseChainElementOptimized(item)
     );
     return parsed.length === 1 ? parsed[0] : parsed;
   }
 
   private normalizeChainInputsOptimized(inputs: ChainValues): unknown {
-    const parsed = (Array.isArray(inputs) ? inputs : [inputs]).map(
-      (item) => this.parseChainElementOptimized(item)
+    const parsed = (Array.isArray(inputs) ? inputs : [inputs]).map((item) =>
+      this.parseChainElementOptimized(item)
     );
     return parsed.length === 1 ? parsed[0] : parsed;
   }
 
   private parseChainElementOptimized(output: any): any {
-    if (typeof output === "string") {
+    if (typeof output === 'string') {
       return output;
     }
 
@@ -792,7 +825,9 @@ export class ZeroEvalCallbackHandler
     }
 
     if (output.messages) {
-      return output.messages.map((msg: any) => this.parseChainElementOptimized(msg));
+      return output.messages.map((msg: any) =>
+        this.parseChainElementOptimized(msg)
+      );
     }
 
     if (output.value) {
@@ -803,7 +838,7 @@ export class ZeroEvalCallbackHandler
       return this.parseChainElementOptimized(output.kwargs);
     }
 
-    if (typeof output === "object" && output) {
+    if (typeof output === 'object' && output) {
       const result = this.metadataPool.acquire();
       for (const [key, value] of Object.entries(output)) {
         result[key] = this.parseChainElementOptimized(value);
@@ -820,13 +855,13 @@ export class ZeroEvalCallbackHandler
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
     }
-    
+
     for (const span of this.spans.values()) {
-      span.setError({ message: "Handler destroyed with active span" });
+      span.setError({ message: 'Handler destroyed with active span' });
       tracer.endSpan(span);
     }
-    
+
     this.spans.clear();
     this.spanStartTimes.clear();
   }
-} 
+}

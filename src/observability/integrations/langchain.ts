@@ -32,26 +32,76 @@ export class LangChainIntegration extends Integration {
       }
     }
 
-    const Runnable = mod.Runnable ?? mod.RunnableBase ?? mod.RunnableSequence ?? undefined;
+    const Runnable =
+      mod.Runnable ?? mod.RunnableBase ?? mod.RunnableSequence ?? undefined;
     if (!Runnable) return;
 
-    const methods: Array<keyof any> = ['invoke', 'ainvoke', 'stream', 'astream', 'batch', 'abatch'];
+    const methods: Array<keyof any> = [
+      'invoke',
+      'ainvoke',
+      'stream',
+      'astream',
+      'batch',
+      'abatch',
+    ];
 
     for (const method of methods) {
       if (typeof Runnable.prototype[method] !== 'function') continue;
-      this.patchMethod(Runnable.prototype as any, method as any, (orig: AnyFn): AnyFn => {
-        const isAsync = method.toString().startsWith('a');
-        const name = `langchain.${String(method)}`;
+      this.patchMethod(
+        Runnable.prototype as any,
+        method as any,
+        (orig: AnyFn): AnyFn => {
+          const isAsync = method.toString().startsWith('a');
+          const name = `langchain.${String(method)}`;
 
-        if (isAsync) {
-          return async function patched(this: any, ...args: any[]) {
+          if (isAsync) {
+            return async function patched(this: any, ...args: any[]) {
+              const className = this?.constructor?.name;
+              const attrs: Record<string, unknown> = {
+                class: className,
+                method: String(method),
+              };
+
+              if (
+                typeof className === 'string' &&
+                className.includes('ChatOpenAI')
+              ) {
+                attrs.kind = 'llm';
+                attrs.provider = 'openai';
+                attrs['service.name'] = 'openai';
+              }
+
+              const span = tracer.startSpan(name, {
+                attributes: attrs,
+                tags: { integration: 'langchain' },
+              });
+              try {
+                const res = await orig.apply(this, args);
+                span.setIO(JSON.stringify(args[0]), JSON.stringify(res));
+                tracer.endSpan(span);
+                return res;
+              } catch (err: any) {
+                span.setError({
+                  code: err?.name,
+                  message: err?.message,
+                  stack: err?.stack,
+                });
+                tracer.endSpan(span);
+                throw err;
+              }
+            };
+          }
+
+          return function patched(this: any, ...args: any[]) {
             const className = this?.constructor?.name;
             const attrs: Record<string, unknown> = {
               class: className,
               method: String(method),
             };
-
-            if (typeof className === 'string' && className.includes('ChatOpenAI')) {
+            if (
+              typeof className === 'string' &&
+              className.includes('ChatOpenAI')
+            ) {
               attrs.kind = 'llm';
               attrs.provider = 'openai';
               attrs['service.name'] = 'openai';
@@ -62,59 +112,39 @@ export class LangChainIntegration extends Integration {
               tags: { integration: 'langchain' },
             });
             try {
-              const res = await orig.apply(this, args);
+              const res = orig.apply(this, args);
+              if (res?.then) {
+                return res
+                  .then((r: any) => {
+                    span.setIO(JSON.stringify(args[0]), JSON.stringify(r));
+                    tracer.endSpan(span);
+                    return r;
+                  })
+                  .catch((err: any) => {
+                    span.setError({
+                      code: err?.name,
+                      message: err?.message,
+                      stack: err?.stack,
+                    });
+                    tracer.endSpan(span);
+                    throw err;
+                  });
+              }
               span.setIO(JSON.stringify(args[0]), JSON.stringify(res));
               tracer.endSpan(span);
               return res;
             } catch (err: any) {
-              span.setError({ code: err?.name, message: err?.message, stack: err?.stack });
+              span.setError({
+                code: err?.name,
+                message: err?.message,
+                stack: err?.stack,
+              });
               tracer.endSpan(span);
               throw err;
             }
           };
         }
-
-        return function patched(this: any, ...args: any[]) {
-          const className = this?.constructor?.name;
-          const attrs: Record<string, unknown> = {
-            class: className,
-            method: String(method),
-          };
-          if (typeof className === 'string' && className.includes('ChatOpenAI')) {
-            attrs.kind = 'llm';
-            attrs.provider = 'openai';
-            attrs['service.name'] = 'openai';
-          }
-
-          const span = tracer.startSpan(name, {
-            attributes: attrs,
-            tags: { integration: 'langchain' },
-          });
-          try {
-            const res = orig.apply(this, args);
-            if (res?.then) {
-              return res
-                .then((r: any) => {
-                  span.setIO(JSON.stringify(args[0]), JSON.stringify(r));
-                  tracer.endSpan(span);
-                  return r;
-                })
-                .catch((err: any) => {
-                  span.setError({ code: err?.name, message: err?.message, stack: err?.stack });
-                  tracer.endSpan(span);
-                  throw err;
-                });
-            }
-            span.setIO(JSON.stringify(args[0]), JSON.stringify(res));
-            tracer.endSpan(span);
-            return res;
-          } catch (err: any) {
-            span.setError({ code: err?.name, message: err?.message, stack: err?.stack });
-            tracer.endSpan(span);
-            throw err;
-          }
-        };
-      });
+      );
     }
   }
-} 
+}

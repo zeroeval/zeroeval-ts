@@ -37,8 +37,13 @@ export function init(opts: InitOptions = {}): void {
   if (apiKey) process.env.ZEROEVAL_API_KEY = apiKey;
   if (apiUrl) process.env.ZEROEVAL_API_URL = apiUrl;
 
-  tracer.configure({ flushInterval, maxSpans, collectCodeDetails, integrations });
-  
+  tracer.configure({
+    flushInterval,
+    maxSpans,
+    collectCodeDetails,
+    integrations,
+  });
+
   // Mark as initialized
   initialized = true;
-} 
+}

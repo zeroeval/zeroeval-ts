@@ -1,8 +1,15 @@
-import type { SignalCreate, BulkSignalsCreate, SignalResponse } from './signals';
+import type {
+  SignalCreate,
+  BulkSignalsCreate,
+  SignalResponse,
+} from './signals';
 
 export class SignalWriter {
   private getApiUrl(): string {
-    return (process.env.ZEROEVAL_API_URL ?? 'https://api.zeroeval.com').replace(/\/$/, '');
+    return (process.env.ZEROEVAL_API_URL ?? 'https://api.zeroeval.com').replace(
+      /\/$/,
+      ''
+    );
   }
 
   private getApiKey(): string | undefined {
@@ -17,7 +24,7 @@ export class SignalWriter {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    
+
     const apiKey = this.getApiKey();
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
@@ -30,7 +37,9 @@ export class SignalWriter {
 
       if (!res.ok) {
         const text = await res.text();
-        console.error(`[ZeroEval] Failed creating signal: ${res.status} ${text}`);
+        console.error(
+          `[ZeroEval] Failed creating signal: ${res.status} ${text}`
+        );
         return {
           status: 'error',
           message: `Failed to create signal: ${res.status} ${text}`,
@@ -55,7 +64,7 @@ export class SignalWriter {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    
+
     const apiKey = this.getApiKey();
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
@@ -70,7 +79,9 @@ export class SignalWriter {
 
       if (!res.ok) {
         const text = await res.text();
-        console.error(`[ZeroEval] Failed creating bulk signals: ${res.status} ${text}`);
+        console.error(
+          `[ZeroEval] Failed creating bulk signals: ${res.status} ${text}`
+        );
         return {
           status: 'error',
           message: `Failed to create bulk signals: ${res.status} ${text}`,
@@ -95,7 +106,7 @@ export class SignalWriter {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    
+
     const apiKey = this.getApiKey();
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
@@ -107,7 +118,9 @@ export class SignalWriter {
 
       if (!res.ok) {
         const text = await res.text();
-        console.error(`[ZeroEval] Failed getting entity signals: ${res.status} ${text}`);
+        console.error(
+          `[ZeroEval] Failed getting entity signals: ${res.status} ${text}`
+        );
         return null;
       }
 
@@ -120,4 +133,4 @@ export class SignalWriter {
 }
 
 // Global singleton instance
-export const signalWriter = new SignalWriter(); 
+export const signalWriter = new SignalWriter();

@@ -12,7 +12,10 @@ export interface SpanWriter {
 
 export class BackendSpanWriter implements SpanWriter {
   private getApiUrl(): string {
-    return (process.env.ZEROEVAL_API_URL ?? 'https://api.zeroeval.com').replace(/\/$/, '');
+    return (process.env.ZEROEVAL_API_URL ?? 'https://api.zeroeval.com').replace(
+      /\/$/,
+      ''
+    );
   }
 
   private getApiKey(): string | undefined {
@@ -30,7 +33,10 @@ export class BackendSpanWriter implements SpanWriter {
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
     // Collect signals from spans and collect trace/session ids
-    const spansWithSignals: Array<{ spanId: string; signals: Record<string, Signal> }> = [];
+    const spansWithSignals: Array<{
+      spanId: string;
+      signals: Record<string, Signal>;
+    }> = [];
     const traceIds = new Set<string>();
     const sessionIds = new Set<string>();
 
@@ -81,19 +87,24 @@ export class BackendSpanWriter implements SpanWriter {
         // Send span-level signals
         await this.sendSpanSignals(spansWithSignals);
         // After spans persisted, send buffered trace/session signals
-        await this.flushTraceSessionSignals(Array.from(traceIds), Array.from(sessionIds));
+        await this.flushTraceSessionSignals(
+          Array.from(traceIds),
+          Array.from(sessionIds)
+        );
       }
     } catch (err) {
       console.error('[ZeroEval] Error posting spans', err);
     }
   }
 
-  private async sendSpanSignals(spansWithSignals: Array<{ spanId: string; signals: Record<string, Signal> }>): Promise<void> {
+  private async sendSpanSignals(
+    spansWithSignals: Array<{ spanId: string; signals: Record<string, Signal> }>
+  ): Promise<void> {
     if (spansWithSignals.length === 0) return;
 
     // Prepare bulk signal creates for all spans
     const bulkSignals: SignalCreate[] = [];
-    
+
     for (const { spanId, signals } of spansWithSignals) {
       for (const [name, signal] of Object.entries(signals)) {
         bulkSignals.push({
@@ -101,7 +112,7 @@ export class BackendSpanWriter implements SpanWriter {
           entity_id: spanId,
           name,
           value: signal.value,
-          signal_type: signal.type
+          signal_type: signal.type,
         });
       }
     }
@@ -115,10 +126,15 @@ export class BackendSpanWriter implements SpanWriter {
     }
   }
 
-  private async flushTraceSessionSignals(traceIds: string[], sessionIds: string[]): Promise<void> {
+  private async flushTraceSessionSignals(
+    traceIds: string[],
+    sessionIds: string[]
+  ): Promise<void> {
     if (traceIds.length === 0 && sessionIds.length === 0) return;
 
-    const { popPendingTraceSignals, popPendingSessionSignals } = (await import('./pendingSignals')) as PendingFns;
+    const { popPendingTraceSignals, popPendingSessionSignals } = (await import(
+      './pendingSignals'
+    )) as PendingFns;
 
     const bulk: SignalCreate[] = [];
 
@@ -158,4 +174,4 @@ export class BackendSpanWriter implements SpanWriter {
       }
     }
   }
-} 
+}

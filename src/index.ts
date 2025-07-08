@@ -33,4 +33,4 @@ export {
   sendSpanSignal,
   getEntitySignals,
 } from './signals';
-export type { Signal, SignalCreate } from './observability/signals'; 
+export type { Signal, SignalCreate } from './observability/signals';
