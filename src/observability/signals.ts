@@ -36,7 +36,10 @@ export interface SignalResponse {
 /**
  * Normalize signal value to string format for consistency with backend
  */
-export function normalizeSignalValue(value: string | boolean | number, signalType?: SignalType): string {
+export function normalizeSignalValue(
+  value: string | boolean | number,
+  signalType?: SignalType
+): string {
   if (typeof value === 'boolean') {
     return value ? 'true' : 'false';
   }
@@ -69,27 +72,33 @@ export function detectSignalType(value: string | boolean | number): SignalType {
 /**
  * Convert signals object to the format expected by the backend
  */
-export function convertSignalsForBackend(signals?: Record<string, string | boolean | number | Signal>): Record<string, Signal> | undefined {
+export function convertSignalsForBackend(
+  signals?: Record<string, string | boolean | number | Signal>
+): Record<string, Signal> | undefined {
   if (!signals) return undefined;
-  
+
   const converted: Record<string, Signal> = {};
-  
+
   for (const [name, signalData] of Object.entries(signals)) {
-    if (typeof signalData === 'object' && 'value' in signalData && 'type' in signalData) {
+    if (
+      typeof signalData === 'object' &&
+      'value' in signalData &&
+      'type' in signalData
+    ) {
       // Already in Signal format
       converted[name] = {
         value: normalizeSignalValue(signalData.value, signalData.type),
-        type: signalData.type
+        type: signalData.type,
       };
     } else {
       // Simple value - auto-detect type
       const type = detectSignalType(signalData);
       converted[name] = {
         value: normalizeSignalValue(signalData, type),
-        type
+        type,
       };
     }
   }
-  
+
   return converted;
-} 
+}

@@ -45,7 +45,11 @@ export class LangGraphIntegration extends Integration {
                 tracer.endSpan(span);
                 return res;
               } catch (err: any) {
-                span.setError({ code: err?.name, message: err?.message, stack: err?.stack });
+                span.setError({
+                  code: err?.name,
+                  message: err?.message,
+                  stack: err?.stack,
+                });
                 tracer.endSpan(span);
                 throw err;
               }
@@ -67,7 +71,11 @@ export class LangGraphIntegration extends Integration {
                     return r;
                   })
                   .catch((err: any) => {
-                    span.setError({ code: err?.name, message: err?.message, stack: err?.stack });
+                    span.setError({
+                      code: err?.name,
+                      message: err?.message,
+                      stack: err?.stack,
+                    });
                     tracer.endSpan(span);
                     throw err;
                   });
@@ -76,7 +84,11 @@ export class LangGraphIntegration extends Integration {
               tracer.endSpan(span);
               return res;
             } catch (err: any) {
-              span.setError({ code: err?.name, message: err?.message, stack: err?.stack });
+              span.setError({
+                code: err?.name,
+                message: err?.message,
+                stack: err?.stack,
+              });
               tracer.endSpan(span);
               throw err;
             }
@@ -96,4 +108,4 @@ export class LangGraphIntegration extends Integration {
       });
     }
   }
-} 
+}

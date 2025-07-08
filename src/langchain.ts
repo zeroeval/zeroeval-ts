@@ -2,5 +2,5 @@ export {
   ZeroEvalCallbackHandler,
   setGlobalCallbackHandler,
   getGlobalHandler,
-  clearGlobalHandler
+  clearGlobalHandler,
 } from './observability/integrations/langchain/index';

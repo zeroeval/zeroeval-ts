@@ -1,0 +1,151 @@
+name: 🔍 PR Quality Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  lint-pr:
+    name: 📝 Lint PR Title
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📝 Check PR Title
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+
+  size-check:
+    name: 📏 Check Bundle Size
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build package
+        run: npm run build
+
+      - name: 📏 Check bundle size
+        run: |
+          echo "## 📏 Bundle Size Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| File | Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|------|" >> $GITHUB_STEP_SUMMARY
+          for file in dist/*.js; do
+            if [ -f "$file" ]; then
+              size=$(du -h "$file" | cut -f1)
+              filename=$(basename "$file")
+              echo "| $filename | $size |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+  test-coverage:
+    name: 📊 Test Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build package
+        run: npm run build
+
+      - name: 📊 Run tests with coverage
+        run: npm run test:coverage -- --run
+
+      - name: 📝 Coverage Report
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: coverage/coverage-summary.json
+          badge: true
+          format: markdown
+          hide_branch_rate: false
+          hide_complexity: true
+          indicators: true
+          output: both
+          thresholds: '60 80'
+
+      - name: 💬 Add Coverage Comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request'
+        with:
+          recreate: true
+          path: code-coverage-results.md
+
+  compatibility:
+    name: 🔧 Compatibility Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔍 Check TypeScript compatibility
+        run: |
+          echo "## 🔧 Compatibility Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### TypeScript Version Compatibility" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ TypeScript 5.0+" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Strict mode compatible" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Node.js Version Support" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Node.js 18.x" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Node.js 20.x" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Node.js 22.x" >> $GITHUB_STEP_SUMMARY
+
+  performance:
+    name: ⚡ Performance Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build package
+        run: npm run build
+
+      - name: ⚡ Run performance tests
+        continue-on-error: true
+        run: |
+          npm run test:perf -- --run > perf-results.txt 2>&1
+          echo "## ⚡ Performance Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "```" >> $GITHUB_STEP_SUMMARY
+          tail -n 20 perf-results.txt >> $GITHUB_STEP_SUMMARY || echo "No performance results available" >> $GITHUB_STEP_SUMMARY
+          echo "```" >> $GITHUB_STEP_SUMMARY

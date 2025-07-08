@@ -1,4 +1,4 @@
-import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 
 let globalHandler: BaseCallbackHandler | undefined;
 
@@ -12,4 +12,4 @@ export const getGlobalHandler = (): BaseCallbackHandler | undefined => {
 
 export const clearGlobalHandler = () => {
   globalHandler = undefined;
-}; 
+};

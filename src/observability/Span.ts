@@ -51,14 +51,20 @@ export class Span {
 
   setIO(input?: unknown, output?: unknown): void {
     if (input !== undefined) {
-      this.inputData = typeof input === 'string' ? input : JSON.stringify(input);
+      this.inputData =
+        typeof input === 'string' ? input : JSON.stringify(input);
     }
     if (output !== undefined) {
-      this.outputData = typeof output === 'string' ? output : JSON.stringify(output);
+      this.outputData =
+        typeof output === 'string' ? output : JSON.stringify(output);
     }
   }
 
-  addSignal(name: string, value: string | boolean | number, type?: 'boolean' | 'numerical'): void {
+  addSignal(
+    name: string,
+    value: string | boolean | number,
+    type?: 'boolean' | 'numerical'
+  ): void {
     // Auto-detect type if not provided
     let signalType = type;
     if (!signalType) {
@@ -81,7 +87,7 @@ export class Span {
 
     this.signals[name] = {
       value,
-      type: signalType
+      type: signalType,
     };
   }
 
@@ -109,4 +115,4 @@ export class Span {
       status: this.status,
     };
   }
-} 
+}

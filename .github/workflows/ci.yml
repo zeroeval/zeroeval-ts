@@ -1,0 +1,179 @@
+name: 🚀 TypeScript SDK CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  quality:
+    name: 🔍 Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🎨 Check Formatting
+        run: |
+          echo "::group::🎨 Prettier Formatting"
+          npm run format:check
+          echo "::endgroup::"
+
+      - name: 🔍 Run Linting
+        run: |
+          echo "::group::🔍 ESLint Linting"
+          npm run lint
+          echo "::endgroup::"
+
+      - name: 🔬 Type Checking
+        run: |
+          echo "::group::🔬 TypeScript Type Checking"
+          npx tsc --noEmit
+          echo "::endgroup::"
+
+      - name: ✅ Quality Summary
+        if: success()
+        run: |
+          echo "::notice::✅ All code quality checks passed!"
+          echo "- Formatting: PASSED"
+          echo "- Linting: PASSED"
+          echo "- Type checking: PASSED"
+
+  test:
+    name: 🧪 Test Node.js ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['18.20.5', '20.18.1', '22.12.0']
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build package
+        run: npm run build
+
+      - name: 🧪 Run Core Tests
+        run: |
+          echo "::group::🧪 Core Tests"
+          npm run test:core -- --run
+          echo "::endgroup::"
+
+      - name: 🚀 Run Performance Tests
+        continue-on-error: true
+        run: |
+          echo "::group::🚀 Performance Tests"
+          npm run test:perf -- --run
+          echo "::endgroup::"
+
+      - name: 📊 Generate Coverage Report
+        if: matrix.node-version == '20.18.1'
+        run: npm run test:coverage -- --run
+
+      - name: 📈 Upload Coverage
+        if: matrix.node-version == '20.18.1'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/coverage-final.json
+          flags: unittests
+          name: typescript-sdk
+          fail_ci_if_error: false
+
+  build:
+    name: 🏗️ Build & Package
+    runs-on: ubuntu-latest
+    needs: [quality, test]
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build package
+        run: npm run build
+
+      - name: 📦 Check package
+        run: |
+          npm pack --dry-run
+          echo "✅ Package is ready for publishing"
+
+      - name: 📤 Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  cross-platform:
+    name: 🖥️ Test ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+        node-version: ['20.18.1']
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build package
+        run: npm run build
+
+      - name: 🧪 Run Core Tests
+        run: npm run test:core -- --run
+
+  summary:
+    name: 📋 CI Summary
+    runs-on: ubuntu-latest
+    needs: [quality, test, build, cross-platform]
+    if: always()
+
+    steps:
+      - name: 📊 Summary
+        run: |
+          echo "## 📋 CI Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔍 Code Quality | ${{ needs.quality.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🧪 Tests | ${{ needs.test.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🏗️ Build | ${{ needs.build.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🖥️ Cross-Platform | ${{ needs.cross-platform.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
