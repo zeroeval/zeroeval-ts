@@ -1,3 +1,5 @@
+/* global console */
+
 /**
  * Logger utility for ZeroEval TypeScript SDK
  * Provides colored console output when debug mode is enabled
@@ -19,6 +21,7 @@ export enum LogLevel {
   INFO = 1,
   WARN = 2,
   ERROR = 3,
+  CRITICAL = 4,
 }
 
 class Logger {
@@ -83,6 +86,15 @@ class Logger {
   error(message: string, ...args: unknown[]): void {
     if (Logger.globalLevel <= LogLevel.ERROR) {
       console.error(this.formatMessage('ERROR', colors.red, message), ...args);
+    }
+  }
+
+  critical(message: string, ...args: unknown[]): void {
+    if (Logger.globalLevel <= LogLevel.CRITICAL) {
+      console.error(
+        this.formatMessage('CRITICAL', colors.boldRed, message),
+        ...args
+      );
     }
   }
 

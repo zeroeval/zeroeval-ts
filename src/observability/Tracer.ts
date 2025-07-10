@@ -1,3 +1,5 @@
+/* global process */
+
 import { AsyncLocalStorage } from 'async_hooks';
 import { randomUUID } from 'crypto';
 import { Span } from './Span';
@@ -42,7 +44,9 @@ export class Tracer {
     // schedule periodic flush
     setInterval(() => {
       if (Date.now() - this._lastFlush >= this._flushIntervalMs) {
-        this.flush();
+        void this.flush().catch((error) => {
+          logger.error('[ZeroEval] Periodic flush failed:', error);
+        });
       }
     }, 1000).unref();
 
@@ -159,7 +163,9 @@ export class Tracer {
       logger.debug(
         `Buffer full (${this._buffer.length} spans), triggering flush`
       );
-      this.flush();
+      void this.flush().catch((error) => {
+        logger.error('[ZeroEval] Buffer full flush failed:', error);
+      });
     }
   }
 
@@ -190,13 +196,32 @@ export class Tracer {
   }
 
   /* FLUSH -----------------------------------------------------------------*/
-  flush(): void {
+  async flush(): Promise<void> {
     if (this._buffer.length === 0) return;
 
-    logger.info(`Flushing ${this._buffer.length} spans to backend`);
+    const spanCount = this._buffer.length;
+    logger.info(`[ZeroEval] Flushing ${spanCount} spans to backend...`);
 
     this._lastFlush = Date.now();
-    this._writer.write(this._buffer.splice(0));
+    const spansToFlush = this._buffer.splice(0);
+
+    try {
+      const startTime = Date.now();
+      await this._writer.write(spansToFlush);
+      const duration = Date.now() - startTime;
+
+      logger.info(
+        `[ZeroEval] Successfully flushed ${spanCount} spans in ${duration}ms`
+      );
+    } catch (error) {
+      logger.error(
+        `[ZeroEval] Failed to flush ${spanCount} spans:`,
+        error instanceof Error ? error.message : error
+      );
+      // Re-add the spans to the buffer for retry
+      this._buffer.unshift(...spansToFlush);
+      throw error;
+    }
   }
 
   private async _setupAvailableIntegrations(): Promise<void> {
@@ -234,14 +259,17 @@ export class Tracer {
 
     logger.info('Shutting down tracer...');
 
-    try {
-      this.flush();
-    } catch (_) {}
+    // Attempt to flush remaining spans
+    void this.flush().catch((error) => {
+      logger.error('[ZeroEval] Shutdown flush failed:', error);
+    });
 
     for (const inst of Object.values(this._integrations)) {
       try {
         inst.teardown();
-      } catch (_) {}
+      } catch (error) {
+        logger.error('[ZeroEval] Integration teardown failed:', error);
+      }
     }
   }
 }

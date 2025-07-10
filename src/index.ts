@@ -4,10 +4,11 @@
  * consumers can simply `import * as ze from '@zeroeval/sdk'`.
  */
 
+// Core exports
+export { init, isInitialized, validateInit } from './init';
 export { span } from './observability/spanDecorator';
 export { withSpan } from './observability/spanDecorator';
 export { tracer } from './observability/Tracer';
-export { init } from './init';
 export {
   getCurrentSpan,
   getCurrentTrace,

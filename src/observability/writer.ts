@@ -1,6 +1,6 @@
 import { signalWriter } from './signalWriter';
 import type { Signal, SignalCreate } from './signals';
-import { getLogger } from './logger';
+import { getLogger, Logger } from './logger';
 
 const logger = getLogger('zeroeval.writer');
 
@@ -77,16 +77,53 @@ export class BackendSpanWriter implements SpanWriter {
       };
     });
 
+    // Log request details
+    logger.debug(`[ZeroEval] Sending ${payload.length} spans to ${endpoint}`);
+    if (Logger.isDebugEnabled()) {
+      logger.debug('[ZeroEval] Request headers:', {
+        ...headers,
+        Authorization: headers.Authorization
+          ? `Bearer ${Logger.maskApiKey(apiKey)}`
+          : undefined,
+      });
+      logger.debug(
+        '[ZeroEval] Request body:',
+        JSON.stringify(payload, null, 2)
+      );
+    }
+
     try {
+      const startTime = Date.now();
       const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),
       });
+      const duration = Date.now() - startTime;
+
+      // Log response details
+      logger.debug(
+        `[ZeroEval] Response received in ${duration}ms - Status: ${res.status}`
+      );
+
+      const text = await res.text();
+      if (Logger.isDebugEnabled()) {
+        // Log response headers in a Node.js compatible way
+        const responseHeaders: Record<string, string> = {};
+        res.headers.forEach((value, key) => {
+          responseHeaders[key] = value;
+        });
+        logger.debug(`[ZeroEval] Response headers:`, responseHeaders);
+        logger.debug(`[ZeroEval] Response body:`, text);
+      }
+
       if (!res.ok) {
-        const text = await res.text();
         logger.error(`[ZeroEval] Failed posting spans: ${res.status} ${text}`);
       } else {
+        logger.info(
+          `[ZeroEval] Successfully posted ${payload.length} spans to ${endpoint}`
+        );
+
         // Send span-level signals
         await this.sendSpanSignals(spansWithSignals);
         // After spans persisted, send buffered trace/session signals
@@ -97,6 +134,20 @@ export class BackendSpanWriter implements SpanWriter {
       }
     } catch (err) {
       logger.error('[ZeroEval] Error posting spans', err);
+      if (Logger.isDebugEnabled()) {
+        logger.debug('[ZeroEval] Error details:', {
+          endpoint,
+          spanCount: payload.length,
+          error:
+            err instanceof Error
+              ? {
+                  name: err.name,
+                  message: err.message,
+                  stack: err.stack,
+                }
+              : err,
+        });
+      }
     }
   }
 

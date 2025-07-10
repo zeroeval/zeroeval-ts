@@ -1,3 +1,5 @@
+/* global process */
+
 import { tracer } from './observability/Tracer';
 import { Logger, getLogger } from './observability/logger';
 
@@ -6,6 +8,7 @@ const logger = getLogger('zeroeval');
 export interface InitOptions {
   apiKey?: string;
   apiUrl?: string;
+  workspaceName?: string;
   flushInterval?: number;
   maxSpans?: number;
   collectCodeDetails?: boolean;
@@ -24,6 +27,21 @@ export function isInitialized(): boolean {
 }
 
 /**
+ * Validate the initialization of the ZeroEval SDK
+ */
+export function validateInit(): boolean {
+  const logger = getLogger('zeroeval');
+
+  if (!process.env.ZEROEVAL_WORKSPACE_NAME || !process.env.ZEROEVAL_API_KEY) {
+    logger.error(
+      "ZeroEval SDK not initialized. Please call ze.init(apiKey='YOUR_API_KEY') first."
+    );
+    return false;
+  }
+  return true;
+}
+
+/**
  * Initialise the SDK. Mirrors `ze.init()` from the Python SDK.
  * Stores credentials in process.env for simplicity; callers may also
  * set env vars before requiring the SDK.
@@ -32,6 +50,7 @@ export function init(opts: InitOptions = {}): void {
   const {
     apiKey,
     apiUrl,
+    workspaceName = 'Personal Workspace',
     flushInterval,
     maxSpans,
     collectCodeDetails,
@@ -56,6 +75,7 @@ export function init(opts: InitOptions = {}): void {
       apiUrl || process.env.ZEROEVAL_API_URL || 'https://api.zeroeval.com';
 
     logger.debug('ZeroEval SDK Configuration:');
+    logger.debug(`  Workspace: ${workspaceName}`);
     logger.debug(`  API Key: ${maskedApiKey}`);
     logger.debug(`  API URL: ${finalApiUrl}`);
     logger.debug(`  Debug Mode: ${isDebugMode}`);
@@ -70,6 +90,8 @@ export function init(opts: InitOptions = {}): void {
     Logger.setDebugMode(false);
   }
 
+  // Set environment variables
+  process.env.ZEROEVAL_WORKSPACE_NAME = workspaceName;
   if (apiKey) process.env.ZEROEVAL_API_KEY = apiKey;
   if (apiUrl) process.env.ZEROEVAL_API_URL = apiUrl;
 
