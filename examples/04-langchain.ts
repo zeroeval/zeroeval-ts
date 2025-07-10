@@ -14,11 +14,6 @@ import { z } from "zod";
 
 setGlobalCallbackHandler(new ZeroEvalCallbackHandler());
 
-init({
-  apiKey: "sk_ze_UKGIwfckKDmIMlRt3F5r-8GYGARl7hO46W1XhLR7618",
-  debug: true,
-})
-
 interface AgentState {
   messages: BaseMessage[];
 }
