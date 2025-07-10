@@ -2,7 +2,7 @@
   // TypeScript Configuration
   "typescript.tsdk": "node_modules/typescript/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
-  
+
   // ESLint Configuration
   "eslint.enable": true,
   "eslint.validate": [
@@ -11,7 +11,7 @@
     "typescript",
     "typescriptreact"
   ],
-  
+
   // Prettier Configuration
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "[typescript]": {
@@ -28,12 +28,11 @@
       "source.fixAll.eslint": "explicit"
     }
   },
-  
+
   // Editor Settings
-  "editor.rulers": [80],
   "files.trimTrailingWhitespace": true,
   "files.insertFinalNewline": true,
-  
+
   // Hide generated files
   "files.exclude": {
     "**/.git": true,
@@ -43,8 +42,8 @@
     "**/coverage": true,
     "**/*.tsbuildinfo": true
   },
-  
+
   // Testing
   "vitest.enable": true,
   "vitest.commandLine": "npx vitest"
-} 
+}
