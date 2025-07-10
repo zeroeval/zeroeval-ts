@@ -1,10 +1,14 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { randomUUID } from 'crypto';
 import { Span } from './Span';
-import { SpanWriter, BackendSpanWriter } from './writer';
+import type { SpanWriter } from './writer';
+import { BackendSpanWriter } from './writer';
 import { setInterval } from 'timers';
 import { discoverIntegrations } from './integrations/utils';
 import type { Integration } from './integrations/base';
+import { getLogger } from './logger';
+
+const logger = getLogger('zeroeval.tracer');
 
 interface ConfigureOptions {
   flushInterval?: number;
@@ -30,6 +34,11 @@ export class Tracer {
   private _shuttingDown = false;
 
   constructor() {
+    logger.debug('Initializing tracer...');
+    logger.debug(
+      `Tracer config: flush_interval=${this._flushIntervalMs}ms, max_spans=${this._maxSpans}`
+    );
+
     // schedule periodic flush
     setInterval(() => {
       if (Date.now() - this._lastFlush >= this._flushIntervalMs) {
@@ -54,10 +63,17 @@ export class Tracer {
 
   /* CONFIG ----------------------------------------------------------------*/
   configure(opts: ConfigureOptions = {}) {
-    if (opts.flushInterval !== undefined)
+    if (opts.flushInterval !== undefined) {
       this._flushIntervalMs = opts.flushInterval * 1000;
-    if (opts.maxSpans !== undefined) this._maxSpans = opts.maxSpans;
-    // Other options ignored for now (collectCodeDetails, integrations)
+      logger.info(
+        `Tracer flush_interval configured to ${opts.flushInterval}s.`
+      );
+    }
+    if (opts.maxSpans !== undefined) {
+      this._maxSpans = opts.maxSpans;
+      logger.info(`Tracer max_spans configured to ${opts.maxSpans}.`);
+    }
+    logger.debug(`Tracer configuration updated:`, opts);
   }
 
   /* ACTIVE SPAN -----------------------------------------------------------*/
@@ -76,6 +92,8 @@ export class Tracer {
       tags?: Record<string, string>;
     } = {}
   ): Span {
+    logger.debug(`Starting span: ${name}`);
+
     const parent = this.currentSpan();
     const span = new Span(name, parent?.traceId);
 
@@ -85,10 +103,14 @@ export class Tracer {
       span.sessionName = parent.sessionName;
       // inherit tags
       span.tags = { ...parent.tags, ...opts.tags };
+      logger.debug(`Span ${name} inherits from parent ${parent.name}`);
     } else {
       span.sessionId = opts.sessionId ?? randomUUID();
       span.sessionName = opts.sessionName;
       span.tags = { ...opts.tags };
+      logger.debug(
+        `Span ${name} is a root span with session ${span.sessionId}`
+      );
     }
 
     Object.assign(span.attributes, opts.attributes);
@@ -107,6 +129,8 @@ export class Tracer {
   endSpan(span: Span): void {
     if (!span.endTime) span.end();
 
+    logger.debug(`Ending span: ${span.name} (duration: ${span.durationMs}ms)`);
+
     // pop stack
     const stack = als.getStore();
     if (stack && stack[stack.length - 1] === span) {
@@ -124,14 +148,25 @@ export class Tracer {
       const ordered = traceBucket.sort((a) => (a.parentId ? 1 : -1));
       delete this._traceBuckets[span.traceId];
       this._buffer.push(...ordered);
+
+      logger.debug(
+        `Trace ${span.traceId} complete with ${ordered.length} spans`
+      );
     }
 
     // flush if buffer full
-    if (this._buffer.length >= this._maxSpans) this.flush();
+    if (this._buffer.length >= this._maxSpans) {
+      logger.debug(
+        `Buffer full (${this._buffer.length} spans), triggering flush`
+      );
+      this.flush();
+    }
   }
 
   /* TAG HELPERS -----------------------------------------------------------*/
   addTraceTags(traceId: string, tags: Record<string, string>): void {
+    logger.debug(`Adding trace tags to ${traceId}:`, tags);
+
     // update buckets
     for (const span of this._traceBuckets[traceId] ?? [])
       Object.assign(span.tags, tags);
@@ -142,6 +177,8 @@ export class Tracer {
   }
 
   addSessionTags(sessionId: string, tags: Record<string, string>): void {
+    logger.debug(`Adding session tags to ${sessionId}:`, tags);
+
     const all = [...Object.values(this._traceBuckets).flat(), ...this._buffer];
     all
       .filter((s) => s.sessionId === sessionId)
@@ -155,23 +192,38 @@ export class Tracer {
   /* FLUSH -----------------------------------------------------------------*/
   flush(): void {
     if (this._buffer.length === 0) return;
+
+    logger.info(`Flushing ${this._buffer.length} spans to backend`);
+
     this._lastFlush = Date.now();
     this._writer.write(this._buffer.splice(0));
   }
 
   private async _setupAvailableIntegrations(): Promise<void> {
+    logger.info('Checking for available integrations...');
+
     const available = await discoverIntegrations();
+
     for (const [key, Ctor] of Object.entries(available)) {
       try {
         const inst = new Ctor();
         if ((Ctor as any).isAvailable?.() !== false) {
+          logger.info(`Setting up integration: ${key}`);
           inst.setup();
           this._integrations[key] = inst;
+          logger.info(`✅ Successfully set up integration: ${key}`);
         }
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn(`[ZeroEval] Failed to setup integration ${key}`, err);
+        logger.error(`❌ Failed to setup integration ${key}:`, err);
       }
+    }
+
+    if (Object.keys(this._integrations).length > 0) {
+      logger.info(
+        `Active integrations: ${Object.keys(this._integrations).join(', ')}`
+      );
+    } else {
+      logger.info('No active integrations found.');
     }
   }
 
@@ -179,6 +231,8 @@ export class Tracer {
   shutdown(): void {
     if (this._shuttingDown) return;
     this._shuttingDown = true;
+
+    logger.info('Shutting down tracer...');
 
     try {
       this.flush();

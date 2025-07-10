@@ -3,6 +3,9 @@ import type {
   BulkSignalsCreate,
   SignalResponse,
 } from './signals';
+import { getLogger } from './logger';
+
+const logger = getLogger('zeroeval.signalWriter');
 
 export class SignalWriter {
   private getApiUrl(): string {
@@ -37,7 +40,7 @@ export class SignalWriter {
 
       if (!res.ok) {
         const text = await res.text();
-        console.error(
+        logger.error(
           `[ZeroEval] Failed creating signal: ${res.status} ${text}`
         );
         return {
@@ -46,9 +49,9 @@ export class SignalWriter {
         };
       }
 
-      return await res.json();
+      return (await res.json()) as SignalResponse;
     } catch (err) {
-      console.error('[ZeroEval] Error creating signal', err);
+      logger.error('[ZeroEval] Error creating signal', err);
       return {
         status: 'error',
         message: `Error creating signal: ${err instanceof Error ? err.message : String(err)}`,
@@ -79,7 +82,7 @@ export class SignalWriter {
 
       if (!res.ok) {
         const text = await res.text();
-        console.error(
+        logger.error(
           `[ZeroEval] Failed creating bulk signals: ${res.status} ${text}`
         );
         return {
@@ -88,9 +91,9 @@ export class SignalWriter {
         };
       }
 
-      return await res.json();
+      return (await res.json()) as SignalResponse;
     } catch (err) {
-      console.error('[ZeroEval] Error creating bulk signals', err);
+      logger.error('[ZeroEval] Error creating bulk signals', err);
       return {
         status: 'error',
         message: `Error creating bulk signals: ${err instanceof Error ? err.message : String(err)}`,
@@ -118,7 +121,7 @@ export class SignalWriter {
 
       if (!res.ok) {
         const text = await res.text();
-        console.error(
+        logger.error(
           `[ZeroEval] Failed getting entity signals: ${res.status} ${text}`
         );
         return null;
@@ -126,7 +129,7 @@ export class SignalWriter {
 
       return await res.json();
     } catch (err) {
-      console.error('[ZeroEval] Error getting entity signals', err);
+      logger.error('[ZeroEval] Error getting entity signals', err);
       return null;
     }
   }

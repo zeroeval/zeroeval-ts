@@ -1,4 +1,4 @@
-import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
+import type { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 
 let globalHandler: BaseCallbackHandler | undefined;
 

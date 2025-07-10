@@ -48,7 +48,7 @@ export class LangChainIntegration extends Integration {
     for (const method of methods) {
       if (typeof Runnable.prototype[method] !== 'function') continue;
       this.patchMethod(
-        Runnable.prototype as any,
+        Runnable.prototype,
         method as any,
         (orig: AnyFn): AnyFn => {
           const isAsync = method.toString().startsWith('a');

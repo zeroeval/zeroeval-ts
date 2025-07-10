@@ -9,24 +9,42 @@ type WrappedClient<T> = T & {
 };
 
 // Type guards for different clients
-function isOpenAIClient(client: any): client is InstanceType<typeof OpenAI> {
+function isOpenAIClient(
+  client: unknown
+): client is InstanceType<typeof OpenAI> {
   // Check for OpenAI-specific properties
+  if (typeof client !== 'object' || client === null) {
+    return false;
+  }
+
+  const obj = client as Record<string, unknown>;
   return (
-    client?.chat?.completions?.create !== undefined &&
-    client?.embeddings?.create !== undefined &&
-    client?.constructor?.name === 'OpenAI'
+    obj.chat !== undefined &&
+    typeof obj.chat === 'object' &&
+    obj.chat !== null &&
+    'completions' in obj.chat &&
+    obj.embeddings !== undefined &&
+    typeof obj.embeddings === 'object' &&
+    obj.embeddings !== null &&
+    'create' in obj.embeddings &&
+    obj.constructor !== undefined &&
+    typeof obj.constructor === 'function' &&
+    obj.constructor.name === 'OpenAI'
   );
 }
 
-function isVercelAIModule(client: any): boolean {
+function isVercelAIModule(client: unknown): boolean {
   // Check for Vercel AI SDK functions
+  if (typeof client !== 'object' || client === null) {
+    return false;
+  }
+
+  const obj = client as Record<string, unknown>;
   return (
-    typeof client === 'object' &&
-    client !== null &&
-    (typeof client.generateText === 'function' ||
-      typeof client.streamText === 'function' ||
-      typeof client.generateObject === 'function' ||
-      typeof client.embed === 'function')
+    typeof obj.generateText === 'function' ||
+    typeof obj.streamText === 'function' ||
+    typeof obj.generateObject === 'function' ||
+    typeof obj.embed === 'function'
   );
 }
 
@@ -94,12 +112,23 @@ export function wrap<T extends object>(client: T): WrappedClient<T> {
   }
 
   // If we reach here, the client type is not supported
+  let clientType = 'unknown';
+  if (typeof client === 'object' && client !== null) {
+    const obj = client as Record<string, unknown>;
+    if (obj.constructor && typeof obj.constructor === 'function') {
+      const ctor = obj.constructor as { name?: string };
+      clientType = ctor.name || 'unknown';
+    }
+  } else {
+    clientType = typeof client;
+  }
+
   throw new Error(
     `Unsupported client type. ze.wrap() currently supports:\n` +
       `- OpenAI clients (from 'openai' package)\n` +
       `- Vercel AI SDK (from 'ai' package)\n` +
       `\n` +
-      `Received: ${(client as any)?.constructor?.name || typeof client}\n` +
+      `Received: ${clientType}\n` +
       `\n` +
       `Make sure you're passing a valid client instance, e.g.:\n` +
       `  const openai = ze.wrap(new OpenAI());\n` +

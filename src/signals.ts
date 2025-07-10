@@ -1,14 +1,14 @@
 import { signalWriter } from './observability/signalWriter';
-import {
-  Signal,
-  SignalCreate,
-  detectSignalType,
-} from './observability/signals';
+import type { Signal, SignalCreate } from './observability/signals';
+import { detectSignalType } from './observability/signals';
 import { tracer } from './observability/Tracer';
 import {
   addPendingTraceSignal,
   addPendingSessionSignal,
 } from './observability/pendingSignals';
+import { getLogger } from './observability/logger';
+
+const logger = getLogger('zeroeval.signals');
 
 /**
  * Send a signal to a specific entity
@@ -50,14 +50,14 @@ export async function sendBulkSignals(signals: SignalCreate[]): Promise<void> {
  * @param value - Signal value (string, boolean, or number)
  * @param signalType - Optional signal type, will be auto-detected if not provided
  */
-export async function sendTraceSignal(
+export function sendTraceSignal(
   name: string,
   value: string | boolean | number,
   signalType?: 'boolean' | 'numerical'
-): Promise<void> {
+): void {
   const currentSpan = tracer.currentSpan();
   if (!currentSpan) {
-    console.warn(
+    logger.warn(
       '[ZeroEval] No active span/trace found for sending trace signal'
     );
     return;
@@ -75,14 +75,14 @@ export async function sendTraceSignal(
  * @param value - Signal value (string, boolean, or number)
  * @param signalType - Optional signal type, will be auto-detected if not provided
  */
-export async function sendSessionSignal(
+export function sendSessionSignal(
   name: string,
   value: string | boolean | number,
   signalType?: 'boolean' | 'numerical'
-): Promise<void> {
+): void {
   const currentSpan = tracer.currentSpan();
   if (!currentSpan || !currentSpan.sessionId) {
-    console.warn(
+    logger.warn(
       '[ZeroEval] No active session found for sending session signal'
     );
     return;
@@ -100,14 +100,14 @@ export async function sendSessionSignal(
  * @param value - Signal value (string, boolean, or number)
  * @param signalType - Optional signal type, will be auto-detected if not provided
  */
-export async function sendSpanSignal(
+export function sendSpanSignal(
   name: string,
   value: string | boolean | number,
   signalType?: 'boolean' | 'numerical'
-): Promise<void> {
+): void {
   const currentSpan = tracer.currentSpan();
   if (!currentSpan) {
-    console.warn('[ZeroEval] No active span found for sending span signal');
+    logger.warn('[ZeroEval] No active span found for sending span signal');
     return;
   }
 
@@ -125,5 +125,13 @@ export async function getEntitySignals(
   entityType: 'session' | 'trace' | 'span' | 'completion',
   entityId: string
 ): Promise<Signal[]> {
-  return await signalWriter.getEntitySignals(entityType, entityId);
+  const result = (await signalWriter.getEntitySignals(
+    entityType,
+    entityId
+  )) as unknown;
+  // Handle null or invalid responses
+  if (!result || !Array.isArray(result)) {
+    return [];
+  }
+  return result as Signal[];
 }
