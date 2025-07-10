@@ -1,7 +1,5 @@
 import { signalWriter } from './signalWriter';
 import type { Signal, SignalCreate } from './signals';
-import { convertSignalsForBackend } from './signals';
-import { Span } from './Span';
 import { getLogger } from './logger';
 
 const logger = getLogger('zeroeval.writer');
