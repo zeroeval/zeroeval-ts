@@ -1,6 +1,6 @@
 {
   "name": "zeroeval",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "ZeroEval TypeScript SDK",
   "keywords": [
     "observability",
@@ -41,19 +41,6 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "typesVersions": {
-    "*": {
-      ".": [
-        "./dist/index.d.ts"
-      ],
-      "langchain": [
-        "./dist/langchain.d.ts"
-      ],
-      "*": [
-        "./dist/*"
-      ]
-    }
-  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
