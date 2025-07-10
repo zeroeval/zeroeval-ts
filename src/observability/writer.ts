@@ -1,5 +1,8 @@
 import { signalWriter } from './signalWriter';
-import { convertSignalsForBackend, Signal, SignalCreate } from './signals';
+import type { Signal, SignalCreate } from './signals';
+import { getLogger } from './logger';
+
+const logger = getLogger('zeroeval.writer');
 
 type PendingFns = {
   popPendingTraceSignals: (id: string) => Record<string, Signal> | undefined;
@@ -82,7 +85,7 @@ export class BackendSpanWriter implements SpanWriter {
       });
       if (!res.ok) {
         const text = await res.text();
-        console.error(`[ZeroEval] Failed posting spans: ${res.status} ${text}`);
+        logger.error(`[ZeroEval] Failed posting spans: ${res.status} ${text}`);
       } else {
         // Send span-level signals
         await this.sendSpanSignals(spansWithSignals);
@@ -93,7 +96,7 @@ export class BackendSpanWriter implements SpanWriter {
         );
       }
     } catch (err) {
-      console.error('[ZeroEval] Error posting spans', err);
+      logger.error('[ZeroEval] Error posting spans', err);
     }
   }
 
@@ -121,7 +124,7 @@ export class BackendSpanWriter implements SpanWriter {
       try {
         await signalWriter.createBulkSignals(bulkSignals);
       } catch (err) {
-        console.error('[ZeroEval] Error sending span signals', err);
+        logger.error('[ZeroEval] Error sending span signals', err);
       }
     }
   }
@@ -170,7 +173,7 @@ export class BackendSpanWriter implements SpanWriter {
       try {
         await signalWriter.createBulkSignals(bulk);
       } catch (err) {
-        console.error('[ZeroEval] Error posting trace/session signals', err);
+        logger.error('[ZeroEval] Error posting trace/session signals', err);
       }
     }
   }

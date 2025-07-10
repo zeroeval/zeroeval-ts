@@ -2,6 +2,7 @@ import {
   ZeroEvalCallbackHandler,
   setGlobalCallbackHandler,
 } from "zeroeval/langchain";
+import { init } from "zeroeval"
 
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
@@ -106,7 +107,7 @@ async function main() {
     const structuredReport = await structuredModel.invoke(
       `Based on this weather information: "${weatherInfo}", generate a detailed weather report.`
     );
-    
+
     console.log("\nStructured Weather Report:");
     console.log(JSON.stringify(structuredReport, null, 2));
 
@@ -132,17 +133,17 @@ async function main() {
     const structuredReport2 = await structuredModel.invoke(
       `Based on this weather information: "${weatherInfo2}", generate a detailed weather report.`
     );
-    
+
     console.log("\nStructured Weather Report for NY:");
     console.log(JSON.stringify(structuredReport2, null, 2));
 
     // Example 3: Direct structured output without tool calling
     console.log("\n\nDirect structured output example...\n");
-    
+
     const directStructuredResult = await structuredModel.invoke(
       "Generate a weather report for London, UK. Make it rainy and cold, around 45°F."
     );
-    
+
     console.log("Direct Structured Output:");
     console.log(JSON.stringify(directStructuredResult, null, 2));
 

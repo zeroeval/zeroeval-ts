@@ -1,9 +1,4 @@
 import { tracer } from './Tracer';
-import { Span } from './Span';
-import { inspect } from 'util';
-import { randomUUID } from 'crypto';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 export interface SpanOptions {
   name: string;

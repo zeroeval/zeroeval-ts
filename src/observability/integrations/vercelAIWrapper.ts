@@ -102,7 +102,7 @@ function wrapVercelAIFunction<T extends VercelAIFunction>(
         input = JSON.stringify(options);
       }
 
-      const result = await (fn as T)(...args);
+      const result = await fn(...args);
 
       // Handle different result types
       if (result && typeof result === 'object') {

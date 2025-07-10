@@ -1,22 +1,23 @@
-import {
-  BaseCallbackHandler,
-  BaseCallbackHandlerInput,
-} from '@langchain/core/callbacks/base';
-import { AgentAction, AgentFinish } from '@langchain/core/dist/agents';
-import { DocumentInterface } from '@langchain/core/dist/documents/document';
-import { Serialized } from '@langchain/core/dist/load/serializable';
-import { BaseMessage } from '@langchain/core/dist/messages/base';
-import {
+import type { BaseCallbackHandlerInput } from '@langchain/core/callbacks/base';
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
+import type { AgentAction, AgentFinish } from '@langchain/core/dist/agents';
+import type { DocumentInterface } from '@langchain/core/dist/documents/document';
+import type { Serialized } from '@langchain/core/dist/load/serializable';
+import type { BaseMessage } from '@langchain/core/dist/messages/base';
+import type {
   ChatGeneration,
   ChatResult,
   Generation,
   LLMResult,
 } from '@langchain/core/dist/outputs';
-import { ChainValues } from '@langchain/core/dist/utils/types';
+import type { ChainValues } from '@langchain/core/dist/utils/types';
 import { ToolMessage } from '@langchain/core/messages';
-import { RunnableConfig } from '@langchain/core/runnables';
+import type { RunnableConfig } from '@langchain/core/runnables';
 import { tracer } from '../../Tracer';
-import { Span } from '../../Span';
+import type { Span } from '../../Span';
+import { getLogger } from '../../logger';
+
+const logger = getLogger('zeroeval.langchain');
 
 export interface ZeroEvalCallbackHandlerOptions {
   debug?: boolean;
@@ -160,14 +161,12 @@ export class ZeroEvalCallbackHandler
     metadata?: Record<string, unknown>;
   }) {
     if (this.spans.has(runId)) {
-      if (this.options.debug) {
-        console.warn(`Span already exists for runId ${runId}`);
-      }
+      logger.warn(`Span already exists for runId ${runId}`);
       return;
     }
 
     if (this.spans.size >= this.options.maxConcurrentSpans) {
-      console.warn(
+      logger.warn(
         `Max concurrent spans (${this.options.maxConcurrentSpans}) reached`
       );
       return;
@@ -240,9 +239,7 @@ export class ZeroEvalCallbackHandler
   }): void {
     const span = this.spans.get(runId);
     if (!span) {
-      if (this.options.debug) {
-        console.warn(`No span exists for runId ${runId}`);
-      }
+      logger.warn(`No span exists for runId ${runId}`);
       return;
     }
 

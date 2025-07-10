@@ -1,5 +1,5 @@
 import { tracer } from './observability/Tracer';
-import { Span } from './observability/Span';
+import type { Span } from './observability/Span';
 
 /** Return the current active Span (or undefined). */
 export function getCurrentSpan(): Span | undefined {
