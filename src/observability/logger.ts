@@ -24,10 +24,22 @@ export enum LogLevel {
   CRITICAL = 4,
 }
 
+// Buffer to store early logs before debug mode is determined
+interface BufferedLog {
+  logger: Logger;
+  level: LogLevel;
+  levelName: string;
+  levelColor: string;
+  message: string;
+  args: unknown[];
+}
+
 class Logger {
   private name: string;
   private static globalLevel: LogLevel = LogLevel.WARN;
   private static isDebugMode: boolean = false;
+  private static earlyLogs: BufferedLog[] = [];
+  private static bufferEarlyLogs: boolean = true;
 
   constructor(name: string) {
     this.name = name;
@@ -36,6 +48,28 @@ class Logger {
   static setDebugMode(enabled: boolean): void {
     Logger.isDebugMode = enabled;
     Logger.globalLevel = enabled ? LogLevel.DEBUG : LogLevel.WARN;
+
+    // Stop buffering after debug mode is set
+    Logger.bufferEarlyLogs = false;
+
+    // Replay buffered logs if debug mode is enabled
+    if (enabled && Logger.earlyLogs.length > 0) {
+      console.log('[zeroeval] Replaying buffered debug logs...');
+      for (const log of Logger.earlyLogs) {
+        if (Logger.globalLevel <= log.level) {
+          const fn = log.level <= LogLevel.INFO ? console.log : console.error;
+          fn(
+            log.logger.formatMessage(
+              log.levelName,
+              log.levelColor,
+              log.message
+            ),
+            ...log.args
+          );
+        }
+      }
+      Logger.earlyLogs = [];
+    }
   }
 
   static isDebugEnabled(): boolean {
@@ -66,12 +100,38 @@ class Logger {
   }
 
   debug(message: string, ...args: unknown[]): void {
+    // Buffer debug logs if we haven't determined debug mode yet
+    if (Logger.bufferEarlyLogs && LogLevel.DEBUG >= Logger.globalLevel) {
+      Logger.earlyLogs.push({
+        logger: this,
+        level: LogLevel.DEBUG,
+        levelName: 'DEBUG',
+        levelColor: colors.blue,
+        message,
+        args,
+      });
+      return;
+    }
+
     if (Logger.globalLevel <= LogLevel.DEBUG) {
       console.log(this.formatMessage('DEBUG', colors.blue, message), ...args);
     }
   }
 
   info(message: string, ...args: unknown[]): void {
+    // Buffer info logs if we haven't determined debug mode yet
+    if (Logger.bufferEarlyLogs && LogLevel.INFO >= Logger.globalLevel) {
+      Logger.earlyLogs.push({
+        logger: this,
+        level: LogLevel.INFO,
+        levelName: 'INFO',
+        levelColor: colors.green,
+        message,
+        args,
+      });
+      return;
+    }
+
     if (Logger.globalLevel <= LogLevel.INFO) {
       console.log(this.formatMessage('INFO', colors.green, message), ...args);
     }

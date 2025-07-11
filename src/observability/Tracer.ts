@@ -8,7 +8,12 @@ import { BackendSpanWriter } from './writer';
 import { setInterval } from 'timers';
 import { discoverIntegrations } from './integrations/utils';
 import type { Integration } from './integrations/base';
-import { getLogger } from './logger';
+import { getLogger, Logger } from './logger';
+
+// Check for debug mode early
+if (process.env.ZEROEVAL_DEBUG?.toLowerCase() === 'true') {
+  Logger.setDebugMode(true);
+}
 
 const logger = getLogger('zeroeval.tracer');
 
