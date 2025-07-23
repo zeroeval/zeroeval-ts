@@ -55,6 +55,7 @@ export class BackendSpanWriter implements SpanWriter {
       return {
         id: base.span_id,
         session_id: base.session_id,
+        session_name: base.session_name,
         trace_id: base.trace_id,
         parent_span_id: base.parent_id,
         name: base.name,
