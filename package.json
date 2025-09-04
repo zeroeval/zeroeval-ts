@@ -1,6 +1,6 @@
 {
   "name": "zeroeval",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "ZeroEval TypeScript SDK",
   "keywords": [
     "observability",
@@ -79,7 +79,8 @@
     "example:openai": "npm run build && npx ts-node --esm examples/03-openai.ts",
     "example:langchain": "npm run build && npx ts-node --esm examples/04-langchain.ts",
     "example:vercel-ai": "npm run build && npx ts-node --esm examples/05-vercel-ai.ts",
-    "example:signals": "npm run build && npx ts-node --esm examples/06-signals.ts"
+    "example:signals": "npm run build && npx ts-node --esm examples/06-signals.ts",
+    "example:decorators": "npm run build && npx ts-node --esm examples/07-decorators-comprehensive.ts"
   },
   "peerDependencies": {
     "@ai-sdk/openai": "^1.3.22",

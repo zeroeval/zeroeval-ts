@@ -218,11 +218,59 @@ function wrapStreamingResult(
         return wrapAsyncIterator(value, span, input, startTime, 'full');
       }
 
+      // Back-compat: some codebases expect consumeStream() to drain the stream
+      if (prop === 'consumeStream') {
+        return async function () {
+          try {
+            // Access through proxy to ensure our wrapped iterator is used
+            const full = (receiver as any).fullStream;
+            const text = (receiver as any).textStream;
+            if (full && typeof full[Symbol.asyncIterator] === 'function') {
+              for await (const _ of full) {
+                // drain
+              }
+            } else if (text && typeof text[Symbol.asyncIterator] === 'function') {
+              for await (const _ of text) {
+                // drain
+              }
+            }
+            // If the wrapped iterator already ended the span, this is a no-op
+            // Otherwise, ensure span is closed
+            try {
+              tracer.endSpan(span);
+            } catch {
+              // ignore if already ended
+            }
+          } catch (error: any) {
+            span.setError({
+              code: error?.name || 'StreamError',
+              message: error?.message || 'Stream error occurred',
+              stack: error?.stack,
+            });
+            try {
+              tracer.endSpan(span);
+            } catch {
+              // ignore
+            }
+            throw error;
+          }
+        };
+      }
+
       // Wrap toDataStreamResponse
       if (prop === 'toDataStreamResponse' && typeof value === 'function') {
         return async function (...args: any[]) {
           const response = await value.apply(target, args);
           // End span when response is created
+          tracer.endSpan(span);
+          return response;
+        };
+      }
+
+      // Some versions expose toAIStreamResponse as an alias
+      if (prop === 'toAIStreamResponse' && typeof value === 'function') {
+        return async function (...args: any[]) {
+          const response = await value.apply(target, args);
           tracer.endSpan(span);
           return response;
         };
