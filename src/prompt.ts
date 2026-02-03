@@ -101,7 +101,10 @@ export async function prompt(options: PromptOptions): Promise<string> {
     try {
       promptObj = await client.getTaskPromptLatest(name);
     } catch (err) {
-      if (err instanceof PromptNotFoundError || err instanceof PromptRequestError) {
+      if (
+        err instanceof PromptNotFoundError ||
+        err instanceof PromptRequestError
+      ) {
         // No latest version exists, ensure the provided content as a version
         promptObj = await client.ensureTaskPromptVersion(name, {
           content: normalizePromptText(content),
@@ -113,7 +116,9 @@ export async function prompt(options: PromptOptions): Promise<string> {
     }
   } else if (fromMode) {
     // Invalid from value
-    throw new Error('from must be "latest", "explicit", or a 64-char lowercase hex SHA-256 hash');
+    throw new Error(
+      'from must be "latest", "explicit", or a 64-char lowercase hex SHA-256 hash'
+    );
   } else {
     throw new Error('Invalid prompt options');
   }
@@ -122,7 +127,8 @@ export async function prompt(options: PromptOptions): Promise<string> {
   let promptSlug: string | null = null;
   try {
     const metadata = promptObj.metadata || {};
-    promptSlug = (metadata.prompt_slug as string) ?? (metadata.prompt as string) ?? null;
+    promptSlug =
+      (metadata.prompt_slug as string) ?? (metadata.prompt as string) ?? null;
   } catch {
     promptSlug = null;
   }
@@ -144,8 +150,8 @@ export async function prompt(options: PromptOptions): Promise<string> {
   if (promptObj.versionId) {
     metadata.prompt_version_id = promptObj.versionId;
   }
-  if (contentHash) {
-    metadata.content_hash = contentHash;
+  if (promptObj.contentHash) {
+    metadata.content_hash = promptObj.contentHash;
   }
 
   // Return decorated prompt

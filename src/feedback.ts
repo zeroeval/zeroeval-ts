@@ -3,19 +3,15 @@
  * Ports the logic from zeroeval-sdk/src/zeroeval/__init__.py and client.py
  */
 
-import type { PromptFeedbackCreate, PromptFeedbackResponse } from './types/prompt';
+import type {
+  PromptFeedbackCreate,
+  PromptFeedbackResponse,
+} from './types/prompt';
 import { PromptRequestError } from './errors';
 import { getLogger } from './observability/logger';
+import { getApiUrl, getApiKey } from './utils/api';
 
 const logger = getLogger('zeroeval.feedback');
-
-function getApiUrl(): string {
-  return (process.env.ZEROEVAL_API_URL ?? 'https://api.zeroeval.com').replace(/\/$/, '');
-}
-
-function getApiKey(): string | undefined {
-  return process.env.ZEROEVAL_API_KEY;
-}
 
 /**
  * Options for sending feedback on a completion.
@@ -71,7 +67,9 @@ export interface SendFeedbackOptions {
  * });
  * ```
  */
-export async function sendFeedback(options: SendFeedbackOptions): Promise<PromptFeedbackResponse> {
+export async function sendFeedback(
+  options: SendFeedbackOptions
+): Promise<PromptFeedbackResponse> {
   const {
     promptSlug,
     completionId,
@@ -132,7 +130,11 @@ export async function sendFeedback(options: SendFeedbackOptions): Promise<Prompt
 
   if (!res.ok) {
     const text = await res.text();
-    throw new PromptRequestError(`send_feedback failed: ${text}`, res.status, text);
+    throw new PromptRequestError(
+      `send_feedback failed: ${text}`,
+      res.status,
+      text
+    );
   }
 
   return res.json();

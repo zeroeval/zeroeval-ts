@@ -1,9 +1,7 @@
 import type { OpenAI } from 'openai';
 import { tracer } from '../Tracer';
-import { extractZeroEvalMetadata } from '../../utils/metadata';
-import { renderTemplate } from '../../utils/template';
 import { getPromptClient } from '../promptClient';
-import type { PromptMetadata } from '../../types/prompt';
+import { processMessagesWithMetadata } from './utils';
 
 type OpenAIClient = InstanceType<typeof OpenAI>;
 
@@ -192,57 +190,6 @@ export function wrapOpenAI<T extends OpenAIClient>(
 }
 
 /**
- * Process messages to extract ZeroEval metadata and interpolate variables.
- * Returns processed messages and extracted metadata.
- */
-interface ProcessedMessages {
-  processedMessages: Array<{ role: string; content: string | unknown }>;
-  metadata: PromptMetadata | null;
-  originalSystemContent: string | null;
-}
-
-function processMessagesWithZeroEval(
-  messages: Array<{ role: string; content: string | unknown }> | undefined
-): ProcessedMessages {
-  if (!messages || messages.length === 0) {
-    return { processedMessages: messages || [], metadata: null, originalSystemContent: null };
-  }
-
-  // Deep copy to avoid mutation
-  const processed = JSON.parse(JSON.stringify(messages)) as Array<{
-    role: string;
-    content: string | unknown;
-  }>;
-
-  // Check first message for system role and metadata
-  const firstMsg = processed[0];
-  if (firstMsg?.role !== 'system' || typeof firstMsg.content !== 'string') {
-    return { processedMessages: processed, metadata: null, originalSystemContent: null };
-  }
-
-  const originalSystemContent = firstMsg.content;
-  const { metadata, cleanContent } = extractZeroEvalMetadata(firstMsg.content);
-
-  if (!metadata) {
-    return { processedMessages: processed, metadata: null, originalSystemContent };
-  }
-
-  // Update system message with clean content (metadata stripped)
-  firstMsg.content = cleanContent;
-
-  // Interpolate variables in all messages if variables are provided
-  if (metadata.variables && Object.keys(metadata.variables).length > 0) {
-    for (const msg of processed) {
-      if (typeof msg.content === 'string') {
-        msg.content = renderTemplate(msg.content, metadata.variables, { missing: 'leave' });
-      }
-    }
-  }
-
-  return { processedMessages: processed, metadata, originalSystemContent };
-}
-
-/**
  * Wraps the chat.completions.create method with tracing
  */
 function wrapCompletionsCreate(originalMethod: Function): Function {
@@ -252,15 +199,20 @@ function wrapCompletionsCreate(originalMethod: Function): Function {
     const startTime = Date.now() / 1000; // Convert to seconds for consistency with Python
 
     // Process messages to extract ZeroEval metadata
-    const { processedMessages, metadata: zeMetadata, originalSystemContent } =
-      processMessagesWithZeroEval(params?.messages);
+    const {
+      processedMessages,
+      metadata: zeMetadata,
+      originalSystemContent,
+    } = processMessagesWithMetadata(params?.messages);
 
     // Patch model if prompt version has a bound model
     let patchedModel = params?.model;
     if (zeMetadata?.prompt_version_id) {
       try {
         const client = getPromptClient();
-        const boundModel = await client.getModelForPromptVersion(zeMetadata.prompt_version_id);
+        const boundModel = await client.getModelForPromptVersion(
+          zeMetadata.prompt_version_id
+        );
         if (boundModel) {
           patchedModel = boundModel;
         }

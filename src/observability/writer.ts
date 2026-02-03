@@ -1,6 +1,7 @@
 import { signalWriter } from './signalWriter';
 import type { Signal, SignalCreate } from './signals';
 import { getLogger, Logger } from './logger';
+import { getApiUrl, getApiKey } from '../utils/api';
 
 const logger = getLogger('zeroeval.writer');
 
@@ -14,25 +15,14 @@ export interface SpanWriter {
 }
 
 export class BackendSpanWriter implements SpanWriter {
-  private getApiUrl(): string {
-    return (process.env.ZEROEVAL_API_URL ?? 'https://api.zeroeval.com').replace(
-      /\/$/,
-      ''
-    );
-  }
-
-  private getApiKey(): string | undefined {
-    return process.env.ZEROEVAL_API_KEY;
-  }
-
   async write(spans: any[]): Promise<void> {
     if (!spans.length) return;
 
-    const endpoint = `${this.getApiUrl()}/spans`;
+    const endpoint = `${getApiUrl()}/spans`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    const apiKey = this.getApiKey();
+    const apiKey = getApiKey();
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
     // Collect signals from spans and collect trace/session ids

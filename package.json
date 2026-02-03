@@ -89,7 +89,7 @@
     "@langchain/langgraph": "^0.3.6",
     "ai": "5.0.0-beta.28",
     "langchain": "^0.3.29",
-    "openai": "^5.8.2"
+    "openai": "^5.8.2 || ^6.0.0"
   },
   "peerDependenciesMeta": {
     "@ai-sdk/openai": {

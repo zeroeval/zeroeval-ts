@@ -2,8 +2,8 @@ import { tracer } from '../Tracer';
 import { init, isInitialized } from '../../init';
 import { extractZeroEvalMetadata } from '../../utils/metadata';
 import { renderTemplate } from '../../utils/template';
-import { getPromptClient } from '../promptClient';
 import type { PromptMetadata } from '../../types/prompt';
+import { processMessagesWithMetadata } from './utils';
 
 // Type to preserve the original function's structure while adding our wrapper
 type WrappedVercelAI<T> = T & {
@@ -14,57 +14,6 @@ type WrappedVercelAI<T> = T & {
 type VercelAIFunction = (...args: any[]) => any;
 
 /**
- * Process messages to extract ZeroEval metadata and interpolate variables.
- * Works with Vercel AI SDK message format.
- */
-interface ProcessedMessagesResult {
-  processedMessages: Array<{ role: string; content: string | unknown }> | undefined;
-  metadata: PromptMetadata | null;
-  originalSystemContent: string | null;
-}
-
-function processMessagesForVercelAI(
-  messages: Array<{ role: string; content: string | unknown }> | undefined
-): ProcessedMessagesResult {
-  if (!messages || messages.length === 0) {
-    return { processedMessages: messages, metadata: null, originalSystemContent: null };
-  }
-
-  // Deep copy to avoid mutation
-  const processed = JSON.parse(JSON.stringify(messages)) as Array<{
-    role: string;
-    content: string | unknown;
-  }>;
-
-  // Check first message for system role and metadata
-  const firstMsg = processed[0];
-  if (firstMsg?.role !== 'system' || typeof firstMsg.content !== 'string') {
-    return { processedMessages: processed, metadata: null, originalSystemContent: null };
-  }
-
-  const originalSystemContent = firstMsg.content;
-  const { metadata, cleanContent } = extractZeroEvalMetadata(firstMsg.content);
-
-  if (!metadata) {
-    return { processedMessages: processed, metadata: null, originalSystemContent };
-  }
-
-  // Update system message with clean content (metadata stripped)
-  firstMsg.content = cleanContent;
-
-  // Interpolate variables in all messages if variables are provided
-  if (metadata.variables && Object.keys(metadata.variables).length > 0) {
-    for (const msg of processed) {
-      if (typeof msg.content === 'string') {
-        msg.content = renderTemplate(msg.content, metadata.variables, { missing: 'leave' });
-      }
-    }
-  }
-
-  return { processedMessages: processed, metadata, originalSystemContent };
-}
-
-/**
  * Process a prompt string to extract ZeroEval metadata and interpolate variables.
  */
 interface ProcessedPromptResult {
@@ -73,9 +22,15 @@ interface ProcessedPromptResult {
   originalPrompt: string;
 }
 
-function processPromptForVercelAI(prompt: string | undefined): ProcessedPromptResult {
+function processPromptForVercelAI(
+  prompt: string | undefined
+): ProcessedPromptResult {
   if (!prompt || typeof prompt !== 'string') {
-    return { processedPrompt: prompt || '', metadata: null, originalPrompt: prompt || '' };
+    return {
+      processedPrompt: prompt || '',
+      metadata: null,
+      originalPrompt: prompt || '',
+    };
   }
 
   const originalPrompt = prompt;
@@ -88,7 +43,9 @@ function processPromptForVercelAI(prompt: string | undefined): ProcessedPromptRe
   // Interpolate variables if present
   let processedPrompt = cleanContent;
   if (metadata.variables && Object.keys(metadata.variables).length > 0) {
-    processedPrompt = renderTemplate(cleanContent, metadata.variables, { missing: 'leave' });
+    processedPrompt = renderTemplate(cleanContent, metadata.variables, {
+      missing: 'leave',
+    });
   }
 
   return { processedPrompt, metadata, originalPrompt };
@@ -135,38 +92,27 @@ function wrapVercelAIFunction<T extends VercelAIFunction>(
 
     // Handle messages-based input
     if (options?.messages) {
-      const { processedMessages, metadata, originalSystemContent: origContent } =
-        processMessagesForVercelAI(options.messages);
+      const {
+        processedMessages,
+        metadata,
+        originalSystemContent: origContent,
+      } = processMessagesWithMetadata(options.messages);
       zeMetadata = metadata;
       originalSystemContent = origContent;
       modifiedOptions.messages = processedMessages;
     }
     // Handle prompt-based input
     else if (options?.prompt && typeof options.prompt === 'string') {
-      const { processedPrompt, metadata, originalPrompt } = processPromptForVercelAI(options.prompt);
+      const { processedPrompt, metadata, originalPrompt } =
+        processPromptForVercelAI(options.prompt);
       zeMetadata = metadata;
       originalSystemContent = originalPrompt;
       modifiedOptions.prompt = processedPrompt;
     }
 
-    // Patch model if prompt version has a bound model
-    let patchedModel = options?.model;
-    if (zeMetadata?.prompt_version_id) {
-      try {
-        const client = getPromptClient();
-        const boundModel = await client.getModelForPromptVersion(zeMetadata.prompt_version_id);
-        if (boundModel) {
-          // For Vercel AI SDK, the model is usually a model instance, not a string
-          // We store the bound model info but don't override the model instance
-          // The user would need to use the bound model directly
-        }
-      } catch {
-        // Silently ignore model lookup failures
-      }
-    }
-
     // Extract relevant information from options
-    const model = modifiedOptions?.model?.modelId || modifiedOptions?.model || 'unknown';
+    const model =
+      modifiedOptions?.model?.modelId || modifiedOptions?.model || 'unknown';
     const messages = modifiedOptions?.messages;
     const prompt = modifiedOptions?.prompt;
     const tools = modifiedOptions?.tools;
@@ -363,7 +309,10 @@ function wrapStreamingResult(
               for await (const _ of full) {
                 // drain
               }
-            } else if (text && typeof text[Symbol.asyncIterator] === 'function') {
+            } else if (
+              text &&
+              typeof text[Symbol.asyncIterator] === 'function'
+            ) {
               for await (const _ of text) {
                 // drain
               }

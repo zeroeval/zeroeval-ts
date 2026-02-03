@@ -4,7 +4,12 @@
  */
 
 import { TTLCache } from '../utils/cache';
-import type { Prompt, PromptResponse, PromptVersionCreate } from '../types/prompt';
+import { getApiUrl, getApiKey } from '../utils/api';
+import type {
+  Prompt,
+  PromptResponse,
+  PromptVersionCreate,
+} from '../types/prompt';
 import { PromptNotFoundError, PromptRequestError } from '../errors';
 import { getLogger } from './logger';
 
@@ -18,23 +23,21 @@ class PromptClient {
   private modelCache: TTLCache<string, string | null>;
 
   constructor() {
-    this.promptCache = new TTLCache<string, Prompt>({ ttlMs: 60000, maxSize: 512 });
-    this.modelCache = new TTLCache<string, string | null>({ ttlMs: 60000, maxSize: 256 });
-  }
-
-  private getApiUrl(): string {
-    return (process.env.ZEROEVAL_API_URL ?? 'https://api.zeroeval.com').replace(/\/$/, '');
-  }
-
-  private getApiKey(): string | undefined {
-    return process.env.ZEROEVAL_API_KEY;
+    this.promptCache = new TTLCache<string, Prompt>({
+      ttlMs: 60000,
+      maxSize: 512,
+    });
+    this.modelCache = new TTLCache<string, string | null>({
+      ttlMs: 60000,
+      maxSize: 256,
+    });
   }
 
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    const apiKey = this.getApiKey();
+    const apiKey = getApiKey();
     if (apiKey) {
       headers.Authorization = `Bearer ${apiKey}`;
     }
@@ -44,8 +47,12 @@ class PromptClient {
   /**
    * Make an API request to the backend.
    */
-  private async request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
-    const url = `${this.getApiUrl()}${path}`;
+  private async request<T>(
+    method: 'GET' | 'POST',
+    path: string,
+    body?: unknown
+  ): Promise<T> {
+    const url = `${getApiUrl()}${path}`;
     const headers = this.getHeaders();
 
     logger.debug(`[ZeroEval] ${method} ${url}`);
@@ -63,7 +70,11 @@ class PromptClient {
     if (!res.ok) {
       const text = await res.text();
       logger.error(`[ZeroEval] Request failed: ${res.status} ${text}`);
-      throw new PromptRequestError(`Request failed: ${res.status}`, res.status, text);
+      throw new PromptRequestError(
+        `Request failed: ${res.status}`,
+        res.status,
+        text
+      );
     }
 
     return res.json();
@@ -93,7 +104,9 @@ class PromptClient {
   /**
    * Normalize version_id from response, handling nested metadata.
    */
-  private normalizeVersionId(data: Record<string, unknown>): Record<string, unknown> {
+  private normalizeVersionId(
+    data: Record<string, unknown>
+  ): Record<string, unknown> {
     if (!data.version_id) {
       const meta = data.metadata as Record<string, unknown> | undefined;
       if (meta && typeof meta === 'object') {
@@ -123,8 +136,12 @@ class PromptClient {
       `/v1/tasks/${encodeURIComponent(taskName)}/prompt/latest`
     );
 
-    const normalized = this.normalizeVersionId(response as unknown as Record<string, unknown>);
-    const prompt = this.responseToPrompt(normalized as unknown as PromptResponse);
+    const normalized = this.normalizeVersionId(
+      response as unknown as Record<string, unknown>
+    );
+    const prompt = this.responseToPrompt(
+      normalized as unknown as PromptResponse
+    );
     this.promptCache.set(cacheKey, prompt);
     return prompt;
   }
@@ -134,7 +151,10 @@ class PromptClient {
    * Creates the prompt if it doesn't exist.
    * POST /v1/tasks/{task_name}/prompt/versions/ensure
    */
-  async ensureTaskPromptVersion(taskName: string, data: PromptVersionCreate): Promise<Prompt> {
+  async ensureTaskPromptVersion(
+    taskName: string,
+    data: PromptVersionCreate
+  ): Promise<Prompt> {
     // Try to inherit model_id from latest version
     let modelId: string | null = null;
     try {
@@ -145,7 +165,9 @@ class PromptClient {
       }
     } catch {
       // No existing version, continue without model inheritance
-      logger.debug(`[ZeroEval] No existing version for ${taskName}, not inheriting model`);
+      logger.debug(
+        `[ZeroEval] No existing version for ${taskName}, not inheriting model`
+      );
     }
 
     const response = await this.request<PromptResponse>(
@@ -154,7 +176,9 @@ class PromptClient {
       { ...data, model_id: modelId }
     );
 
-    const normalized = this.normalizeVersionId(response as unknown as Record<string, unknown>);
+    const normalized = this.normalizeVersionId(
+      response as unknown as Record<string, unknown>
+    );
     return this.responseToPrompt(normalized as unknown as PromptResponse);
   }
 
@@ -162,7 +186,10 @@ class PromptClient {
    * Get a prompt version by content hash.
    * GET /v1/tasks/{task_name}/prompt/versions/by-hash/{content_hash}
    */
-  async getTaskPromptVersionByHash(taskName: string, contentHash: string): Promise<Prompt> {
+  async getTaskPromptVersionByHash(
+    taskName: string,
+    contentHash: string
+  ): Promise<Prompt> {
     const cacheKey = `hash:${taskName}:${contentHash}`;
     const cached = this.promptCache.get(cacheKey);
     if (cached) {
@@ -175,8 +202,12 @@ class PromptClient {
       `/v1/tasks/${encodeURIComponent(taskName)}/prompt/versions/by-hash/${contentHash}`
     );
 
-    const normalized = this.normalizeVersionId(response as unknown as Record<string, unknown>);
-    const prompt = this.responseToPrompt(normalized as unknown as PromptResponse);
+    const normalized = this.normalizeVersionId(
+      response as unknown as Record<string, unknown>
+    );
+    const prompt = this.responseToPrompt(
+      normalized as unknown as PromptResponse
+    );
     this.promptCache.set(cacheKey, prompt);
     return prompt;
   }
@@ -239,11 +270,4 @@ export function getPromptClient(): PromptClient {
     promptClient = new PromptClient();
   }
   return promptClient;
-}
-
-/**
- * Reset the singleton instance (for testing).
- */
-export function resetPromptClient(): void {
-  promptClient = null;
 }

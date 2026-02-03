@@ -4,31 +4,21 @@ import type {
   SignalResponse,
 } from './signals';
 import { getLogger, Logger } from './logger';
+import { getApiUrl, getApiKey } from '../utils/api';
 
 const logger = getLogger('zeroeval.signalWriter');
 
 export class SignalWriter {
-  private getApiUrl(): string {
-    return (process.env.ZEROEVAL_API_URL ?? 'https://api.zeroeval.com').replace(
-      /\/$/,
-      ''
-    );
-  }
-
-  private getApiKey(): string | undefined {
-    return process.env.ZEROEVAL_API_KEY;
-  }
-
   /**
    * Send a single signal to the backend
    */
   async createSignal(signal: SignalCreate): Promise<SignalResponse> {
-    const endpoint = `${this.getApiUrl()}/signals/`;
+    const endpoint = `${getApiUrl()}/signals/`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
-    const apiKey = this.getApiKey();
+    const apiKey = getApiKey();
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
     // Log request details
@@ -109,12 +99,12 @@ export class SignalWriter {
    * Send multiple signals to the backend in bulk
    */
   async createBulkSignals(signals: SignalCreate[]): Promise<SignalResponse> {
-    const endpoint = `${this.getApiUrl()}/signals/bulk`;
+    const endpoint = `${getApiUrl()}/signals/bulk`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
-    const apiKey = this.getApiKey();
+    const apiKey = getApiKey();
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
     const bulkRequest: BulkSignalsCreate = { signals };
@@ -202,12 +192,12 @@ export class SignalWriter {
    * Get all signals for a specific entity
    */
   async getEntitySignals(entityType: string, entityId: string): Promise<any> {
-    const endpoint = `${this.getApiUrl()}/signals/entity/${entityType}/${entityId}`;
+    const endpoint = `${getApiUrl()}/signals/entity/${entityType}/${entityId}`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
-    const apiKey = this.getApiKey();
+    const apiKey = getApiKey();
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
     // Log request details
