@@ -82,9 +82,18 @@ export class TTLCache<K, V> {
 
   /**
    * Check if a key exists and is not expired.
+   * This is a pure query that does not modify LRU order.
    */
   has(key: K): boolean {
-    return this.get(key) !== undefined;
+    const entry = this.data.get(key);
+    if (!entry) {
+      return false;
+    }
+    if (Date.now() - entry.timestamp > this.ttlMs) {
+      this.data.delete(key);
+      return false;
+    }
+    return true;
   }
 
   /**

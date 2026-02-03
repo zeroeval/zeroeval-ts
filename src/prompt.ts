@@ -101,10 +101,13 @@ export async function prompt(options: PromptOptions): Promise<string> {
     try {
       promptObj = await client.getTaskPromptLatest(name);
     } catch (err) {
-      if (
+      // Only fall back for "not found" errors (404)
+      // Re-throw server errors (500), auth failures (401), etc.
+      const isNotFoundError =
         err instanceof PromptNotFoundError ||
-        err instanceof PromptRequestError
-      ) {
+        (err instanceof PromptRequestError && err.status === 404);
+
+      if (isNotFoundError) {
         // No latest version exists, ensure the provided content as a version
         promptObj = await client.ensureTaskPromptVersion(name, {
           content: normalizePromptText(content),

@@ -145,5 +145,21 @@ describe('TTLCache', () => {
       vi.advanceTimersByTime(1001);
       expect(cache.has('key')).toBe(false);
     });
+
+    it('should NOT update LRU order (pure query)', () => {
+      const cache = new TTLCache<string, string>({ maxSize: 2 });
+      cache.set('key1', 'value1');
+      cache.set('key2', 'value2');
+
+      // has() should NOT promote key1 to most-recently-used
+      cache.has('key1');
+
+      // Add key3, should evict key1 (still least recently used)
+      cache.set('key3', 'value3');
+
+      expect(cache.get('key1')).toBeUndefined();
+      expect(cache.get('key2')).toBe('value2');
+      expect(cache.get('key3')).toBe('value3');
+    });
   });
 });

@@ -34,22 +34,16 @@ export default defineConfig({
         singleThread: true, // Important for testing AsyncLocalStorage
       },
     },
-    deps: {
-      optimizer: {
-        web: {
-          enabled: false,
-        },
-        ssr: {
-          enabled: false,
-        },
+    server: {
+      deps: {
+        external: [
+          'langchain',
+          '@langchain/core',
+          'openai',
+          'ai',
+          '@ai-sdk/openai',
+        ],
       },
-      external: [
-        'langchain',
-        '@langchain/core',
-        'openai',
-        'ai',
-        '@ai-sdk/openai',
-      ],
     },
   },
   resolve: {

@@ -214,7 +214,8 @@ function wrapCompletionsCreate(originalMethod: Function): Function {
           zeMetadata.prompt_version_id
         );
         if (boundModel) {
-          patchedModel = boundModel;
+          // Strip zeroeval/ prefix before sending to OpenAI API
+          patchedModel = boundModel.replace(/^zeroeval\//, '');
         }
       } catch {
         // Silently ignore model lookup failures, use original model
