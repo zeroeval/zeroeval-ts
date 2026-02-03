@@ -1,6 +1,7 @@
 import { signalWriter } from './signalWriter';
 import type { Signal, SignalCreate } from './signals';
 import { getLogger, Logger } from './logger';
+import { getApiUrl, getApiKey } from '../utils/api';
 
 const logger = getLogger('zeroeval.writer');
 
@@ -14,25 +15,14 @@ export interface SpanWriter {
 }
 
 export class BackendSpanWriter implements SpanWriter {
-  private getApiUrl(): string {
-    return (process.env.ZEROEVAL_API_URL ?? 'https://api.zeroeval.com').replace(
-      /\/$/,
-      ''
-    );
-  }
-
-  private getApiKey(): string | undefined {
-    return process.env.ZEROEVAL_API_KEY;
-  }
-
   async write(spans: any[]): Promise<void> {
     if (!spans.length) return;
 
-    const endpoint = `${this.getApiUrl()}/spans`;
+    const endpoint = `${getApiUrl()}/spans`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    const apiKey = this.getApiKey();
+    const apiKey = getApiKey();
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
     // Collect signals from spans and collect trace/session ids
@@ -52,6 +42,9 @@ export class BackendSpanWriter implements SpanWriter {
       traceIds.add(base.trace_id);
       if (base.session_id) sessionIds.add(base.session_id);
 
+      // Extract kind from attributes (default to 'generic')
+      const kind = base.attributes?.kind ?? 'generic';
+
       return {
         id: base.span_id,
         session_id: base.session_id,
@@ -59,6 +52,7 @@ export class BackendSpanWriter implements SpanWriter {
         trace_id: base.trace_id,
         parent_span_id: base.parent_id,
         name: base.name,
+        kind: kind,
         started_at: base.start_time,
         ended_at: base.end_time,
         duration_ms: base.duration_ms,

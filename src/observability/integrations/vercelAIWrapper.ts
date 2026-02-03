@@ -1,5 +1,9 @@
 import { tracer } from '../Tracer';
 import { init, isInitialized } from '../../init';
+import { extractZeroEvalMetadata } from '../../utils/metadata';
+import { renderTemplate } from '../../utils/template';
+import type { PromptMetadata } from '../../types/prompt';
+import { processMessagesWithMetadata } from './utils';
 
 // Type to preserve the original function's structure while adding our wrapper
 type WrappedVercelAI<T> = T & {
@@ -8,6 +12,44 @@ type WrappedVercelAI<T> = T & {
 
 // Type for the Vercel AI SDK functions we want to wrap
 type VercelAIFunction = (...args: any[]) => any;
+
+/**
+ * Process a prompt string to extract ZeroEval metadata and interpolate variables.
+ */
+interface ProcessedPromptResult {
+  processedPrompt: string;
+  metadata: PromptMetadata | null;
+  originalPrompt: string;
+}
+
+function processPromptForVercelAI(
+  prompt: string | undefined
+): ProcessedPromptResult {
+  if (!prompt || typeof prompt !== 'string') {
+    return {
+      processedPrompt: prompt || '',
+      metadata: null,
+      originalPrompt: prompt || '',
+    };
+  }
+
+  const originalPrompt = prompt;
+  const { metadata, cleanContent } = extractZeroEvalMetadata(prompt);
+
+  if (!metadata) {
+    return { processedPrompt: prompt, metadata: null, originalPrompt };
+  }
+
+  // Interpolate variables if present
+  let processedPrompt = cleanContent;
+  if (metadata.variables && Object.keys(metadata.variables).length > 0) {
+    processedPrompt = renderTemplate(cleanContent, metadata.variables, {
+      missing: 'leave',
+    });
+  }
+
+  return { processedPrompt, metadata, originalPrompt };
+}
 
 /**
  * Wraps a Vercel AI SDK function to automatically trace all calls.
@@ -43,15 +85,41 @@ function wrapVercelAIFunction<T extends VercelAIFunction>(
   ) {
     const [options] = args;
 
+    // Process messages or prompt to extract ZeroEval metadata
+    let zeMetadata: PromptMetadata | null = null;
+    let originalSystemContent: string | null = null;
+    let modifiedOptions = { ...options };
+
+    // Handle messages-based input
+    if (options?.messages) {
+      const {
+        processedMessages,
+        metadata,
+        originalSystemContent: origContent,
+      } = processMessagesWithMetadata(options.messages);
+      zeMetadata = metadata;
+      originalSystemContent = origContent;
+      modifiedOptions.messages = processedMessages;
+    }
+    // Handle prompt-based input
+    else if (options?.prompt && typeof options.prompt === 'string') {
+      const { processedPrompt, metadata, originalPrompt } =
+        processPromptForVercelAI(options.prompt);
+      zeMetadata = metadata;
+      originalSystemContent = originalPrompt;
+      modifiedOptions.prompt = processedPrompt;
+    }
+
     // Extract relevant information from options
-    const model = options?.model?.modelId || options?.model || 'unknown';
-    const messages = options?.messages;
-    const prompt = options?.prompt;
-    const tools = options?.tools;
-    const maxSteps = options?.maxSteps;
-    const maxRetries = options?.maxRetries;
-    const temperature = options?.temperature;
-    const maxTokens = options?.maxTokens;
+    const model =
+      modifiedOptions?.model?.modelId || modifiedOptions?.model || 'unknown';
+    const messages = modifiedOptions?.messages;
+    const prompt = modifiedOptions?.prompt;
+    const tools = modifiedOptions?.tools;
+    const maxSteps = modifiedOptions?.maxSteps;
+    const maxRetries = modifiedOptions?.maxRetries;
+    const temperature = modifiedOptions?.temperature;
+    const maxTokens = modifiedOptions?.maxTokens;
 
     // Determine the kind based on function name
     let kind = 'operation';
@@ -72,20 +140,32 @@ function wrapVercelAIFunction<T extends VercelAIFunction>(
       kind = 'transcription';
     }
 
+    // Build span attributes including ZeroEval metadata if present
+    const spanAttributes: Record<string, unknown> = {
+      'service.name': 'vercel-ai-sdk',
+      kind,
+      provider: 'vercel-ai-sdk',
+      model,
+      ...(messages && { messages: messages }),
+      ...(temperature !== undefined && { temperature }),
+      ...(maxTokens !== undefined && { maxTokens }),
+      ...(maxSteps !== undefined && { maxSteps }),
+      ...(maxRetries !== undefined && { maxRetries }),
+      ...(tools && { toolCount: Object.keys(tools).length }),
+      ...(functionName.includes('stream') && { streaming: true }),
+    };
+
+    // Add ZeroEval metadata to span attributes if present
+    if (zeMetadata) {
+      spanAttributes.task = zeMetadata.task;
+      spanAttributes.zeroeval = zeMetadata;
+      if (originalSystemContent) {
+        spanAttributes.system_prompt_template = originalSystemContent;
+      }
+    }
+
     const span = tracer.startSpan(`vercelai.${functionName}`, {
-      attributes: {
-        'service.name': 'vercel-ai-sdk',
-        kind,
-        provider: 'vercel-ai-sdk',
-        model,
-        ...(messages && { messages: messages }),
-        ...(temperature !== undefined && { temperature }),
-        ...(maxTokens !== undefined && { maxTokens }),
-        ...(maxSteps !== undefined && { maxSteps }),
-        ...(maxRetries !== undefined && { maxRetries }),
-        ...(tools && { toolCount: Object.keys(tools).length }),
-        ...(functionName.includes('stream') && { streaming: true }),
-      },
+      attributes: spanAttributes,
       tags: { integration: 'vercel-ai-sdk' },
     });
 
@@ -99,10 +179,10 @@ function wrapVercelAIFunction<T extends VercelAIFunction>(
       } else if (prompt) {
         input = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
       } else {
-        input = JSON.stringify(options);
+        input = JSON.stringify(modifiedOptions);
       }
 
-      const result = await fn(...args);
+      const result = await fn(modifiedOptions);
 
       // Handle different result types
       if (result && typeof result === 'object') {
@@ -229,7 +309,10 @@ function wrapStreamingResult(
               for await (const _ of full) {
                 // drain
               }
-            } else if (text && typeof text[Symbol.asyncIterator] === 'function') {
+            } else if (
+              text &&
+              typeof text[Symbol.asyncIterator] === 'function'
+            ) {
               for await (const _ of text) {
                 // drain
               }

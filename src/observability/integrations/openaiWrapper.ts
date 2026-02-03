@@ -1,5 +1,7 @@
 import type { OpenAI } from 'openai';
 import { tracer } from '../Tracer';
+import { getPromptClient } from '../promptClient';
+import { processMessagesWithMetadata } from './utils';
 
 type OpenAIClient = InstanceType<typeof OpenAI>;
 
@@ -196,38 +198,81 @@ function wrapCompletionsCreate(originalMethod: Function): Function {
     const isStreaming = !!params?.stream;
     const startTime = Date.now() / 1000; // Convert to seconds for consistency with Python
 
+    // Process messages to extract ZeroEval metadata
+    const {
+      processedMessages,
+      metadata: zeMetadata,
+      originalSystemContent,
+    } = processMessagesWithMetadata(params?.messages);
+
+    // Patch model if prompt version has a bound model
+    let patchedModel = params?.model;
+    if (zeMetadata?.prompt_version_id) {
+      try {
+        const client = getPromptClient();
+        const boundModel = await client.getModelForPromptVersion(
+          zeMetadata.prompt_version_id
+        );
+        if (boundModel) {
+          // Strip zeroeval/ prefix before sending to OpenAI API
+          patchedModel = boundModel.replace(/^zeroeval\//, '');
+        }
+      } catch {
+        // Silently ignore model lookup failures, use original model
+      }
+    }
+
+    // Build the modified params with processed messages and potentially patched model
+    const modifiedParams = {
+      ...params,
+      messages: processedMessages,
+      model: patchedModel,
+    };
+
     // Enable usage tracking for streaming on OpenAI-native models
     if (
       isStreaming &&
-      params?.model &&
-      typeof params.model === 'string' &&
-      !params.model.includes('/')
+      modifiedParams?.model &&
+      typeof modifiedParams.model === 'string' &&
+      !modifiedParams.model.includes('/')
     ) {
-      params.stream_options = { include_usage: true };
+      modifiedParams.stream_options = { include_usage: true };
     }
 
-    // Serialize messages for attributes
-    const serializedMessages = params?.messages
-      ? params.messages.map((msg: any) => ({
+    // Serialize processed messages for attributes (after variable interpolation)
+    const serializedMessages = processedMessages
+      ? processedMessages.map((msg: any) => ({
           role: msg.role,
           content: msg.content,
         }))
       : [];
 
+    // Build span attributes including ZeroEval metadata if present
+    const spanAttributes: Record<string, unknown> = {
+      'service.name': 'openai',
+      kind: 'llm',
+      provider: 'openai',
+      model: patchedModel,
+      messages: serializedMessages,
+      streaming: isStreaming,
+    };
+
+    // Add ZeroEval metadata to span attributes if present
+    if (zeMetadata) {
+      spanAttributes.task = zeMetadata.task;
+      spanAttributes.zeroeval = zeMetadata;
+      if (originalSystemContent) {
+        spanAttributes.system_prompt_template = originalSystemContent;
+      }
+    }
+
     const span = tracer.startSpan('openai.chat.completions.create', {
-      attributes: {
-        'service.name': 'openai',
-        kind: 'llm',
-        provider: 'openai',
-        model: params?.model,
-        messages: serializedMessages,
-        streaming: isStreaming,
-      },
+      attributes: spanAttributes,
       tags: { integration: 'openai' },
     });
 
     try {
-      const result = await originalMethod(...args);
+      const result = await originalMethod(modifiedParams);
 
       // Handle streaming responses
       if (

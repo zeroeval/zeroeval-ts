@@ -35,3 +35,27 @@ export {
   getEntitySignals,
 } from './signals';
 export type { Signal, SignalCreate } from './observability/signals';
+
+// Prompt management
+export { prompt } from './prompt';
+export { sendFeedback } from './feedback';
+export type { SendFeedbackOptions } from './feedback';
+
+// Prompt types
+export type {
+  Prompt,
+  PromptOptions,
+  PromptMetadata,
+  PromptResponse,
+  PromptFeedbackCreate,
+  PromptFeedbackResponse,
+  PromptVersionCreate,
+} from './types/prompt';
+
+// Prompt errors
+export { PromptNotFoundError, PromptRequestError } from './errors';
+
+// Prompt utilities (for advanced users)
+export { sha256Hex, normalizePromptText } from './utils/hash';
+export { renderTemplate, extractVariables } from './utils/template';
+export { decoratePrompt, extractZeroEvalMetadata } from './utils/metadata';
