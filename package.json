@@ -80,7 +80,8 @@
     "example:langchain": "npm run build && npx ts-node --esm examples/04-langchain.ts",
     "example:vercel-ai": "npm run build && npx ts-node --esm examples/05-vercel-ai.ts",
     "example:signals": "npm run build && npx ts-node --esm examples/06-signals.ts",
-    "examples:vercel-ai-stream-consume": "export ZEROEVAL_API_KEY='sk_ze_KuadTVfiHcute8F7UTKFtiykNgd7O9uuNAbzV44eook' && npm run build && npx ts-node --esm examples/07-ai-stream-consume.ts"
+    "example:ai-stream-consume": "npm run build && npx ts-node --esm examples/07-ai-stream-consume.ts",
+    "example:prompt": "npm run build && npx ts-node --esm examples/08-prompt.ts"
   },
   "peerDependencies": {
     "@ai-sdk/openai": "^2.0.0",
@@ -124,6 +125,7 @@
     "eslint-config-prettier": "^10.1.5",
     "eslint-plugin-prettier": "^5.5.1",
     "globals": "^16.3.0",
+    "openai": "^6.17.0",
     "prettier": "^3.6.2",
     "rimraf": "^5.0.0",
     "ts-node": "^10.9.2",
