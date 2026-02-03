@@ -63,10 +63,6 @@ class PromptClient {
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    if (res.status === 404) {
-      throw new PromptNotFoundError(path);
-    }
-
     if (!res.ok) {
       const text = await res.text();
       logger.error(`[ZeroEval] Request failed: ${res.status} ${text}`);
@@ -131,10 +127,18 @@ class PromptClient {
       return cached;
     }
 
-    const response = await this.request<PromptResponse>(
-      'GET',
-      `/v1/tasks/${encodeURIComponent(taskName)}/prompt/latest`
-    );
+    let response: PromptResponse;
+    try {
+      response = await this.request<PromptResponse>(
+        'GET',
+        `/v1/tasks/${encodeURIComponent(taskName)}/prompt/latest`
+      );
+    } catch (err) {
+      if (err instanceof PromptRequestError && err.status === 404) {
+        throw new PromptNotFoundError(taskName);
+      }
+      throw err;
+    }
 
     const normalized = this.normalizeVersionId(
       response as unknown as Record<string, unknown>
@@ -197,10 +201,18 @@ class PromptClient {
       return cached;
     }
 
-    const response = await this.request<PromptResponse>(
-      'GET',
-      `/v1/tasks/${encodeURIComponent(taskName)}/prompt/versions/by-hash/${contentHash}`
-    );
+    let response: PromptResponse;
+    try {
+      response = await this.request<PromptResponse>(
+        'GET',
+        `/v1/tasks/${encodeURIComponent(taskName)}/prompt/versions/by-hash/${contentHash}`
+      );
+    } catch (err) {
+      if (err instanceof PromptRequestError && err.status === 404) {
+        throw new PromptNotFoundError(taskName);
+      }
+      throw err;
+    }
 
     const normalized = this.normalizeVersionId(
       response as unknown as Record<string, unknown>
