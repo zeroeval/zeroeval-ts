@@ -81,7 +81,8 @@
     "example:vercel-ai": "npm run build && npx ts-node --esm examples/05-vercel-ai.ts",
     "example:signals": "npm run build && npx ts-node --esm examples/06-signals.ts",
     "example:ai-stream-consume": "npm run build && npx ts-node --esm examples/07-ai-stream-consume.ts",
-    "example:prompt": "npm run build && npx ts-node --esm examples/08-prompt.ts"
+    "example:prompt": "npm run build && npx ts-node --esm examples/08-prompt.ts",
+    "example:vapi": "npm run build && npx ts-node --esm examples/09-vapi.ts"
   },
   "peerDependencies": {
     "@ai-sdk/openai": "^2.0.0",
@@ -113,6 +114,7 @@
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^2.0.11",
+    "@vapi-ai/server-sdk": "^0.7.0",
     "@eslint/js": "^9.30.1",
     "@langchain/core": "^0.3.75",
     "@types/node": "^20.19.6",
