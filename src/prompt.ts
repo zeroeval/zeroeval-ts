@@ -129,9 +129,14 @@ export async function prompt(options: PromptOptions): Promise<string> {
   // Pull linkage metadata for decoration
   let promptSlug: string | null = null;
   try {
-    const metadata = promptObj.metadata || {};
-    promptSlug =
-      (metadata.prompt_slug as string) ?? (metadata.prompt as string) ?? null;
+    // Prefer the prompt slug from the response (top-level field)
+    promptSlug = promptObj.promptSlug ?? null;
+    // Fallback to version metadata if not available
+    if (!promptSlug) {
+      const metadata = promptObj.metadata || {};
+      promptSlug =
+        (metadata.prompt_slug as string) ?? (metadata.prompt as string) ?? null;
+    }
   } catch {
     promptSlug = null;
   }

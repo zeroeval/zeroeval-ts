@@ -129,6 +129,12 @@ If you cannot help, offer to transfer to a human agent.`,
   // The assistant's response (what Vapi's AI would say)
   const assistantResponse = "I'd be happy to help you reset your password! Let me look into why you didn't receive the reset email. Can you confirm the email address associated with your account?";
 
+  // IMPORTANT: outputData must be a structured object (not a bare string) so it
+  // survives the backend's JSONB serialization round-trip. The optimization pipeline
+  // extracts the answer from output_data.content — a plain string like
+  // outputData: assistantResponse will be lost during JSON parsing and cause
+  // "No valid examples to train on" errors.
+
   // Build the zeroeval metadata object for span attributes
   // This is what links the span to the prompt for feedback
   const spanZeroEvalMetadata = {
@@ -160,10 +166,13 @@ If you cannot help, offer to transfer to a human agent.`,
         messages: conversationMessages,
         streaming: false,
       },
-      // Input should be the messages array (system + user messages)
-      inputData: JSON.stringify(conversationMessages),
-      // Output should be just the assistant's response
-      outputData: assistantResponse,
+      // Input: pass the messages array directly (SDK will JSON.stringify objects automatically)
+      inputData: conversationMessages,
+      // Output: MUST be a structured object, not a bare string.
+      // The backend extracts the answer via output_data.get("content").
+      // A plain string (e.g. outputData: "some text") fails JSONB round-trip parsing
+      // and causes all optimization examples to be skipped.
+      outputData: { role: 'assistant', content: assistantResponse },
     },
     async () => {
       // Capture span ID for feedback

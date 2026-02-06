@@ -30,6 +30,7 @@ export interface Prompt {
   content: string;
   version: number | null;
   versionId: string | null;
+  promptSlug: string | null;
   tag: string | null;
   isLatest: boolean;
   model: string | null;
