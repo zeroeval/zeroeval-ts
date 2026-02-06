@@ -84,6 +84,7 @@ class PromptClient {
       content: response.content,
       version: response.version,
       versionId: response.version_id,
+      taskId: response.task_id || null,
       promptSlug: response.prompt || null,
       tag: response.tag,
       isLatest: response.is_latest,

@@ -142,8 +142,9 @@ export async function prompt(options: PromptOptions): Promise<string> {
   }
 
   // Build metadata for decoration
+  // Use the actual task ID from the backend when available; fall back to name
   const metadata: PromptMetadata = {
-    task: name,
+    task: promptObj.taskId || name,
   };
 
   if (variables && Object.keys(variables).length > 0) {

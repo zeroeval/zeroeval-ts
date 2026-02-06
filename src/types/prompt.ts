@@ -4,6 +4,7 @@
  */
 export interface PromptResponse {
   prompt: string; // prompt slug
+  task_id: string | null; // actual task UUID from backend
   version_id: string;
   version: number;
   tag: string | null;
@@ -30,6 +31,7 @@ export interface Prompt {
   content: string;
   version: number | null;
   versionId: string | null;
+  taskId: string | null;
   promptSlug: string | null;
   tag: string | null;
   isLatest: boolean;
