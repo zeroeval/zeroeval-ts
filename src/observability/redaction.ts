@@ -33,6 +33,10 @@ type RedactionResult<T> = {
   metadata?: RedactionMetadata;
 };
 
+type RedactionTraversalContext = {
+  visiting: WeakSet<object>;
+};
+
 type RedactionType = 'EMAIL' | 'PHONE' | 'SSN' | 'PAN' | 'SECRET' | 'IP';
 
 type StringRedactionOptions = {
@@ -118,8 +122,7 @@ export function redactInputValue(
   if (!config.enabled || !config.redactInputs) {
     return { value };
   }
-
-  return redactValue(value, config);
+  return redactValue(value, config, createTraversalContext());
 }
 
 export function redactOutputValue(
@@ -129,8 +132,7 @@ export function redactOutputValue(
   if (!config.enabled || !config.redactOutputs) {
     return { value };
   }
-
-  return redactValue(value, config);
+  return redactValue(value, config, createTraversalContext());
 }
 
 export function redactAttributes(
@@ -140,8 +142,7 @@ export function redactAttributes(
   if (!value || !config.enabled || !config.redactAttributes) {
     return { value };
   }
-
-  return redactObject(value, config);
+  return redactObject(value, config, createTraversalContext());
 }
 
 export function redactTags(
@@ -294,13 +295,14 @@ export function safeSerialize(value: unknown): string {
 
 function redactValue(
   value: unknown,
-  config: ResolvedRedactionConfig
+  config: ResolvedRedactionConfig,
+  context: RedactionTraversalContext
 ): RedactionResult<unknown> {
   if (typeof value === 'string') {
     if (looksLikeJson(value)) {
       const parsed = tryParseJson(value);
       if (parsed !== undefined) {
-        return redactValue(parsed, config);
+        return redactValue(parsed, config, context);
       }
     }
 
@@ -308,11 +310,19 @@ function redactValue(
   }
 
   if (Array.isArray(value)) {
-    return redactArray(value, config);
+    if (context.visiting.has(value)) {
+      return { value: '[Circular]' };
+    }
+
+    return redactArray(value, config, context);
   }
 
   if (value && typeof value === 'object') {
-    return redactObject(value as Record<string, unknown>, config);
+    if (context.visiting.has(value)) {
+      return { value: '[Circular]' };
+    }
+
+    return redactObject(value as Record<string, unknown>, config, context);
   }
 
   return { value };
@@ -320,63 +330,83 @@ function redactValue(
 
 function redactArray(
   value: unknown[],
-  config: ResolvedRedactionConfig
+  config: ResolvedRedactionConfig,
+  context: RedactionTraversalContext
 ): RedactionResult<unknown[]> {
+  context.visiting.add(value);
+
   let nextValue: unknown[] | undefined;
   let metadata: RedactionMetadata | undefined;
 
-  value.forEach((item, index) => {
-    const redacted = redactValue(item, config);
-    if (!nextValue && redacted.value !== item) {
-      nextValue = [...value];
-    }
+  try {
+    value.forEach((item, index) => {
+      const redacted = redactValue(item, config, context);
+      if (!nextValue && redacted.value !== item) {
+        nextValue = [...value];
+      }
 
-    if (nextValue) {
-      nextValue[index] = redacted.value;
-    }
+      if (nextValue) {
+        nextValue[index] = redacted.value;
+      }
 
-    metadata = mergeMetadata(metadata, redacted.metadata);
-  });
+      metadata = mergeMetadata(metadata, redacted.metadata);
+    });
+  } finally {
+    context.visiting.delete(value);
+  }
 
   return { value: nextValue ?? value, metadata };
 }
 
 function redactObject(
   value: Record<string, unknown>,
-  config: ResolvedRedactionConfig
+  config: ResolvedRedactionConfig,
+  context: RedactionTraversalContext
 ): RedactionResult<Record<string, unknown>> {
+  context.visiting.add(value);
+
   let nextValue: Record<string, unknown> | undefined;
   let metadata: RedactionMetadata | undefined;
 
-  for (const [key, rawValue] of Object.entries(value)) {
-    let redacted: RedactionResult<unknown>;
+  try {
+    for (const [key, rawValue] of Object.entries(value)) {
+      let redacted: RedactionResult<unknown>;
 
-    if (isSensitiveKey(key, config)) {
-      const type = detectRedactionType(rawValue);
-      redacted = {
-        value: createPlaceholder(type, String(rawValue ?? '')),
-        metadata: {
-          enabled: true,
-          count: 1,
-          types: [type],
-        },
-      };
-    } else {
-      redacted = redactValue(rawValue, config);
+      if (isSensitiveKey(key, config)) {
+        const type = detectRedactionType(rawValue);
+        redacted = {
+          value: createPlaceholder(type, String(rawValue ?? '')),
+          metadata: {
+            enabled: true,
+            count: 1,
+            types: [type],
+          },
+        };
+      } else {
+        redacted = redactValue(rawValue, config, context);
+      }
+
+      if (!nextValue && redacted.value !== rawValue) {
+        nextValue = { ...value };
+      }
+
+      if (nextValue) {
+        nextValue[key] = redacted.value;
+      }
+
+      metadata = mergeMetadata(metadata, redacted.metadata);
     }
-
-    if (!nextValue && redacted.value !== rawValue) {
-      nextValue = { ...value };
-    }
-
-    if (nextValue) {
-      nextValue[key] = redacted.value;
-    }
-
-    metadata = mergeMetadata(metadata, redacted.metadata);
+  } finally {
+    context.visiting.delete(value);
   }
 
   return { value: nextValue ?? value, metadata };
+}
+
+function createTraversalContext(): RedactionTraversalContext {
+  return {
+    visiting: new WeakSet<object>(),
+  };
 }
 
 function redactString(

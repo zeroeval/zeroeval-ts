@@ -96,6 +96,25 @@ describe('PII redaction', () => {
     expect(json.output_data).toContain('[REDACTED_SECRET]');
   });
 
+  it('should handle circular payloads without throwing and keep output serializable', () => {
+    const span = new Span('circular-redaction', undefined, {
+      enabled: true,
+    });
+    const payload: Record<string, unknown> = {
+      email: 'alice@example.com',
+    };
+    payload.self = payload;
+
+    expect(() => span.setIO(payload, payload)).not.toThrow();
+
+    const json = span.toJSON();
+
+    expect(json.input_data).toContain('[REDACTED_EMAIL]');
+    expect(json.input_data).toContain('[Circular]');
+    expect(json.output_data).toContain('[REDACTED_EMAIL]');
+    expect(json.output_data).toContain('[Circular]');
+  });
+
   it('should honor ZEROEVAL_REDACT_PII in init()', async () => {
     const mockWriter = new MockSpanWriter();
     (tracer as any)._writer = mockWriter;

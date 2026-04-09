@@ -26,6 +26,7 @@ export class Span {
   endTime?: number;
 
   sessionId?: string;
+  sessionLookupId?: string;
   sessionName?: string;
 
   attributes: Record<string, unknown> = {};

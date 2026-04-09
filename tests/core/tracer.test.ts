@@ -305,6 +305,32 @@ describe('Tracer', () => {
         '[REDACTED_EMAIL]'
       );
     });
+
+    it('should propagate session tags using the original session identifier when redacted', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const sessionId = 'alice@example.com';
+
+      const span1 = tracer.startSpan('span1', { sessionId });
+      tracer.endSpan(span1);
+
+      const span2 = tracer.startSpan('span2', { sessionId });
+      tracer.endSpan(span2);
+
+      tracer.addSessionTags(sessionId, { customer_email: sessionId });
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(2);
+      expect(mockWriter.spans[0].session_id).toContain('[REDACTED_EMAIL_');
+      expect(mockWriter.spans[1].session_id).toContain('[REDACTED_EMAIL_');
+      expect(mockWriter.spans[0].session_id).toBe(
+        mockWriter.spans[1].session_id
+      );
+      expect(mockWriter.spans[0].tags.customer_email).toBe('[REDACTED_EMAIL]');
+      expect(mockWriter.spans[1].tags.customer_email).toBe('[REDACTED_EMAIL]');
+    });
   });
 
   describe('error handling', () => {

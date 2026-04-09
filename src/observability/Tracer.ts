@@ -147,23 +147,28 @@ export class Tracer {
     if (parent) {
       span.parentId = parent.spanId;
       span.sessionId = parent.sessionId;
+      span.sessionLookupId = parent.sessionLookupId;
       span.sessionName = parent.sessionName;
       // inherit tags
       span.tags = {
         ...parent.tags,
         ...(this._traceTags[parent.traceId] ?? {}),
-        ...(parent.sessionId
-          ? (this._sessionTags[parent.sessionId] ?? {})
+        ...(parent.sessionLookupId
+          ? (this._sessionTags[parent.sessionLookupId] ?? {})
           : {}),
         ...(redactedTags.value ?? {}),
       };
       logger.debug(`Span ${name} inherits from parent ${parent.name}`);
     } else {
-      span.sessionId = redactedSessionId.value ?? randomUUID();
+      const rawSessionId = opts.sessionId ?? randomUUID();
+      span.sessionLookupId = rawSessionId;
+      span.sessionId = redactedSessionId.value ?? rawSessionId;
       span.sessionName = redactedSessionName.value;
       span.tags = {
         ...(this._traceTags[span.traceId] ?? {}),
-        ...(span.sessionId ? (this._sessionTags[span.sessionId] ?? {}) : {}),
+        ...(span.sessionLookupId
+          ? (this._sessionTags[span.sessionLookupId] ?? {})
+          : {}),
         ...(redactedTags.value ?? {}),
       };
       logger.debug(
@@ -263,7 +268,7 @@ export class Tracer {
       all.push(span);
     }
     all
-      .filter((s) => s.sessionId === sessionId)
+      .filter((s) => s.sessionLookupId === sessionId)
       .forEach((s) => Object.assign(s.tags, redactedTags.value));
   }
 
