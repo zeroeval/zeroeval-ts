@@ -626,17 +626,27 @@ function detectExactMatchType(
     return null;
   }
 
-  if (EMAIL_REGEX.test(trimmed) && EMAIL_REGEX.lastIndex === trimmed.length) {
-    EMAIL_REGEX.lastIndex = 0;
+  EMAIL_REGEX.lastIndex = 0;
+  const emailMatch = EMAIL_REGEX.exec(trimmed);
+  EMAIL_REGEX.lastIndex = 0;
+  if (
+    emailMatch &&
+    emailMatch.index === 0 &&
+    emailMatch.index + emailMatch[0].length === trimmed.length
+  ) {
     return 'EMAIL';
   }
-  EMAIL_REGEX.lastIndex = 0;
 
-  if (SSN_REGEX.test(trimmed) && SSN_REGEX.lastIndex === trimmed.length) {
-    SSN_REGEX.lastIndex = 0;
+  SSN_REGEX.lastIndex = 0;
+  const ssnMatch = SSN_REGEX.exec(trimmed);
+  SSN_REGEX.lastIndex = 0;
+  if (
+    ssnMatch &&
+    ssnMatch.index === 0 &&
+    ssnMatch.index + ssnMatch[0].length === trimmed.length
+  ) {
     return 'SSN';
   }
-  SSN_REGEX.lastIndex = 0;
 
   if (
     BEARER_REGEX.test(trimmed) ||
@@ -650,29 +660,41 @@ function detectExactMatchType(
   }
   resetGlobalRegexes();
 
-  if (IPV4_REGEX.test(trimmed) && IPV4_REGEX.lastIndex === trimmed.length) {
-    IPV4_REGEX.lastIndex = 0;
-    return 'IP';
-  }
   IPV4_REGEX.lastIndex = 0;
-
-  if (IPV6_REGEX.test(trimmed) && IPV6_REGEX.lastIndex === trimmed.length) {
-    IPV6_REGEX.lastIndex = 0;
+  const ipv4Match = IPV4_REGEX.exec(trimmed);
+  IPV4_REGEX.lastIndex = 0;
+  if (
+    ipv4Match &&
+    ipv4Match.index === 0 &&
+    ipv4Match.index + ipv4Match[0].length === trimmed.length
+  ) {
     return 'IP';
   }
+
   IPV6_REGEX.lastIndex = 0;
+  const ipv6Match = IPV6_REGEX.exec(trimmed);
+  IPV6_REGEX.lastIndex = 0;
+  if (
+    ipv6Match &&
+    ipv6Match.index === 0 &&
+    ipv6Match.index + ipv6Match[0].length === trimmed.length
+  ) {
+    return 'IP';
+  }
 
   const phoneCandidate = trimmed.replace(/[\s().-]/g, '');
+  PHONE_REGEX.lastIndex = 0;
+  const phoneMatch = PHONE_REGEX.exec(trimmed);
+  PHONE_REGEX.lastIndex = 0;
   if (
-    PHONE_REGEX.test(trimmed) &&
-    PHONE_REGEX.lastIndex === trimmed.length &&
+    phoneMatch &&
+    phoneMatch.index === 0 &&
+    phoneMatch.index + phoneMatch[0].length === trimmed.length &&
     phoneCandidate.length >= 8 &&
     phoneCandidate.length <= 15
   ) {
-    PHONE_REGEX.lastIndex = 0;
     return 'PHONE';
   }
-  PHONE_REGEX.lastIndex = 0;
 
   const panDigits = trimmed.replace(/[ -]/g, '');
   if (isLikelyPan(panDigits)) {

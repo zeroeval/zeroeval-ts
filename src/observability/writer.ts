@@ -12,6 +12,7 @@ import {
   redactSessionName,
   redactTags,
   resolveRedactionConfig,
+  safeSerialize,
 } from './redaction';
 import type { RedactionConfig, ResolvedRedactionConfig } from './redaction';
 
@@ -117,8 +118,14 @@ export class BackendSpanWriter implements SpanWriter {
         duration_ms: base.duration_ms,
         attributes: mergedAttributes,
         status: base.status,
-        input_data: inputData.value,
-        output_data: outputData.value,
+        input_data:
+          typeof inputData.value === 'string'
+            ? inputData.value
+            : safeSerialize(inputData.value),
+        output_data:
+          typeof outputData.value === 'string'
+            ? outputData.value
+            : safeSerialize(outputData.value),
         code: base.code ?? base.attributes?.code,
         code_filepath: base.code_filepath ?? base.attributes?.code_filepath,
         code_lineno: base.code_lineno ?? base.attributes?.code_lineno,
