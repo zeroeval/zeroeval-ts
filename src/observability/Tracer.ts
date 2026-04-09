@@ -61,6 +61,7 @@ export class Tracer {
   private _activeSessionCounts: Record<string, number> = {};
   private _traceRedactionContexts: Record<string, RedactionReferenceContext> =
     {};
+  private _bufferedTraceIds = new Set<string>();
 
   private _integrations: Record<string, Integration> = {};
   private _shuttingDown = false;
@@ -294,9 +295,8 @@ export class Tracer {
       delete this._activeTraceCounts[span.traceId];
       const ordered = traceBucket.sort((a) => (a.parentId ? 1 : -1));
       delete this._traceBuckets[span.traceId];
-      delete this._traceTags[span.traceId];
-      delete this._traceTagMetadata[span.traceId];
       this._buffer.push(...ordered);
+      this._bufferedTraceIds.add(span.traceId);
 
       if (span.sessionLookupId) {
         this._activeSessionCounts[span.sessionLookupId] -= 1;
@@ -450,7 +450,7 @@ export class Tracer {
     return (
       traceId in this._activeTraceCounts ||
       traceId in this._traceBuckets ||
-      this._buffer.some((span) => span.traceId === traceId)
+      this._bufferedTraceIds.has(traceId)
     );
   }
 
@@ -480,6 +480,9 @@ export class Tracer {
     this._lastFlush = Date.now();
     const spansToFlush = this._buffer.splice(0);
     const flushedTraceIds = new Set(spansToFlush.map((span) => span.traceId));
+    for (const traceId of flushedTraceIds) {
+      this._bufferedTraceIds.delete(traceId);
+    }
 
     try {
       const startTime = Date.now();
@@ -514,6 +517,9 @@ export class Tracer {
       );
       // Re-add the spans to the buffer for retry
       this._buffer.unshift(...spansToFlush);
+      for (const traceId of flushedTraceIds) {
+        this._bufferedTraceIds.add(traceId);
+      }
       throw error;
     }
   }
