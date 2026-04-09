@@ -48,6 +48,7 @@ export class Tracer {
   private _traceBuckets: Record<string, Span[]> = {};
   private _traceTags: Record<string, Record<string, string>> = {};
   private _sessionTags: Record<string, Record<string, string>> = {};
+  private _activeSessionCounts: Record<string, number> = {};
 
   private _integrations: Record<string, Integration> = {};
   private _shuttingDown = false;
@@ -190,6 +191,11 @@ export class Tracer {
     this._activeTraceCounts[span.traceId] =
       (this._activeTraceCounts[span.traceId] || 0) + 1;
 
+    if (!parent && span.sessionLookupId) {
+      this._activeSessionCounts[span.sessionLookupId] =
+        (this._activeSessionCounts[span.sessionLookupId] || 0) + 1;
+    }
+
     return span;
   }
 
@@ -214,7 +220,16 @@ export class Tracer {
       delete this._activeTraceCounts[span.traceId];
       const ordered = traceBucket.sort((a) => (a.parentId ? 1 : -1));
       delete this._traceBuckets[span.traceId];
+      delete this._traceTags[span.traceId];
       this._buffer.push(...ordered);
+
+      if (span.sessionLookupId) {
+        this._activeSessionCounts[span.sessionLookupId] -= 1;
+        if (this._activeSessionCounts[span.sessionLookupId] === 0) {
+          delete this._activeSessionCounts[span.sessionLookupId];
+          delete this._sessionTags[span.sessionLookupId];
+        }
+      }
 
       logger.debug(
         `Trace ${span.traceId} complete with ${ordered.length} spans`

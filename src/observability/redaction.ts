@@ -609,14 +609,11 @@ function detectRedactionType(value: unknown): RedactionType {
     return 'SECRET';
   }
 
-  return detectExactMatchType(value, resolveRedactionConfig({ enabled: true }))
-    ? (detectExactMatchType(
-        value,
-        resolveRedactionConfig({ enabled: true })
-      ) as RedactionType)
-    : value.includes('@')
-      ? 'EMAIL'
-      : 'SECRET';
+  const exactType = detectExactMatchType(
+    value,
+    resolveRedactionConfig({ enabled: true })
+  );
+  return exactType ?? (value.includes('@') ? 'EMAIL' : 'SECRET');
 }
 
 function detectExactMatchType(

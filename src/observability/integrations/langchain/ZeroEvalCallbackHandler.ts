@@ -231,7 +231,7 @@ export class ZeroEvalCallbackHandler
     }
 
     if (output !== undefined) {
-      span.setIO(span.inputData, output);
+      span.setIO(undefined, output);
     }
 
     if (error) {
