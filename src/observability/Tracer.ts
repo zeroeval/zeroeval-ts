@@ -235,6 +235,10 @@ export class Tracer {
       stack.pop();
     }
 
+    if (!(span.traceId in this._activeTraceCounts)) {
+      return;
+    }
+
     // bucket by trace until root finished
     const traceBucket = (this._traceBuckets[span.traceId] ||= []);
     traceBucket.push(span);

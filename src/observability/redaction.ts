@@ -175,29 +175,32 @@ export function redactTags(
   let metadata: RedactionMetadata | undefined;
 
   for (const [key, rawValue] of Object.entries(value)) {
-    const redactedValue = isSensitiveKey(key, config)
-      ? redactSensitiveValueByType(
-          detectRedactionType(rawValue),
-          rawValue,
-          referenceContext
-        )
-      : redactString(rawValue, config, {}, referenceContext).value;
+    let redacted: RedactionResult<string>;
 
-    if (!nextValue && redactedValue !== rawValue) {
+    if (isSensitiveKey(key, config)) {
+      const type = detectRedactionType(rawValue);
+      redacted = {
+        value: redactSensitiveValueByType(type, rawValue, referenceContext),
+        metadata: {
+          enabled: true,
+          count: 1,
+          types: [type],
+        },
+      };
+    } else {
+      redacted = redactString(rawValue, config, {}, referenceContext);
+    }
+
+    if (!nextValue && redacted.value !== rawValue) {
       nextValue = { ...value };
     }
 
     if (nextValue) {
-      nextValue[key] = redactedValue;
+      nextValue[key] = redacted.value;
     }
 
-    if (redactedValue !== rawValue) {
-      const type = detectRedactionType(rawValue);
-      metadata = mergeMetadata(metadata, {
-        enabled: true,
-        count: 1,
-        types: [type],
-      });
+    if (redacted.value !== rawValue) {
+      metadata = mergeMetadata(metadata, redacted.metadata);
     }
   }
 
