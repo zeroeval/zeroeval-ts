@@ -334,7 +334,14 @@ function redactValue(
     if (looksLikeJson(value)) {
       const parsed = tryParseJson(value);
       if (parsed !== undefined) {
-        return redactValue(parsed, config, context);
+        const redacted = redactValue(parsed, config, context);
+        return {
+          value:
+            typeof redacted.value === 'string'
+              ? redacted.value
+              : safeSerialize(redacted.value),
+          metadata: redacted.metadata,
+        };
       }
     }
 
@@ -667,15 +674,14 @@ function createPlaceholder(type: RedactionType, suffix?: string): string {
   return suffix ? `[REDACTED_${type}_${suffix}]` : `[REDACTED_${type}]`;
 }
 
+const DEFAULT_RESOLVED_CONFIG = resolveRedactionConfig({ enabled: true });
+
 function detectRedactionType(value: unknown): RedactionType {
   if (typeof value !== 'string') {
     return 'SECRET';
   }
 
-  const exactType = detectExactMatchType(
-    value,
-    resolveRedactionConfig({ enabled: true })
-  );
+  const exactType = detectExactMatchType(value, DEFAULT_RESOLVED_CONFIG);
   return exactType ?? (value.includes('@') ? 'EMAIL' : 'SECRET');
 }
 
