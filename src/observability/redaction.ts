@@ -47,7 +47,6 @@ type RedactionTraversalContext = {
 type RedactionType = 'EMAIL' | 'PHONE' | 'SSN' | 'PAN' | 'SECRET' | 'IP';
 
 type StringRedactionOptions = {
-  stable?: boolean;
   parseJsonStrings?: boolean;
 };
 
@@ -528,18 +527,6 @@ function redactString(
   let nextValue = value;
   let metadata: RedactionMetadata | undefined;
 
-  const exactType = options.stable ? detectExactMatchType(value, config) : null;
-  if (exactType) {
-    return {
-      value: redactSensitiveValueByType(exactType, value, referenceContext),
-      metadata: {
-        enabled: true,
-        count: 1,
-        types: [exactType],
-      },
-    };
-  }
-
   if (options.parseJsonStrings && looksLikeJson(value)) {
     const parsed = tryParseJson(value);
     if (parsed !== undefined) {
@@ -796,16 +783,14 @@ function detectExactMatchType(
   }
 
   if (
-    BEARER_REGEX.test(trimmed) ||
-    JWT_REGEX.test(trimmed) ||
-    API_KEY_REGEX.test(trimmed) ||
-    AUTH_HEADER_REGEX.test(trimmed) ||
-    COOKIE_HEADER_REGEX.test(trimmed)
+    exactMatchesEntireString(BEARER_REGEX, trimmed) ||
+    exactMatchesEntireString(JWT_REGEX, trimmed) ||
+    exactMatchesEntireString(API_KEY_REGEX, trimmed) ||
+    exactMatchesEntireString(AUTH_HEADER_REGEX, trimmed) ||
+    exactMatchesEntireString(COOKIE_HEADER_REGEX, trimmed)
   ) {
-    resetGlobalRegexes();
     return 'SECRET';
   }
-  resetGlobalRegexes();
 
   IPV4_REGEX.lastIndex = 0;
   const ipv4Match = IPV4_REGEX.exec(trimmed);
@@ -1031,12 +1016,11 @@ function normalizeKey(value: string): string {
     .replace(/_+/g, '_');
 }
 
-function resetGlobalRegexes(): void {
-  BEARER_REGEX.lastIndex = 0;
-  JWT_REGEX.lastIndex = 0;
-  API_KEY_REGEX.lastIndex = 0;
-  AUTH_HEADER_REGEX.lastIndex = 0;
-  COOKIE_HEADER_REGEX.lastIndex = 0;
+function exactMatchesEntireString(regex: RegExp, value: string): boolean {
+  regex.lastIndex = 0;
+  const match = regex.exec(value);
+  regex.lastIndex = 0;
+  return !!match && match.index === 0 && match[0].length === value.length;
 }
 
 function isLikelyPan(value: string): boolean {
