@@ -373,6 +373,18 @@ export class Tracer {
 
       for (const traceId of flushedTraceIds) {
         delete this._traceRedactionContexts[traceId];
+        if (!(traceId in this._activeTraceCounts)) {
+          delete this._traceTags[traceId];
+        }
+      }
+
+      const flushedSessionIds = new Set(
+        spansToFlush.map((s) => s.sessionLookupId).filter(Boolean)
+      );
+      for (const sessionId of flushedSessionIds) {
+        if (sessionId && !(sessionId in this._activeSessionCounts)) {
+          delete this._sessionTags[sessionId];
+        }
       }
 
       logger.info(

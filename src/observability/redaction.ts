@@ -58,7 +58,8 @@ const IPV6_REGEX =
 const JWT_REGEX = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\b/g;
 const API_KEY_REGEX =
   /\b(?:sk|pk|rk|ghp|gho|ghu|ghs|github_pat|xox[baprs]-|AIza|ya29|AKIA|ASIA)[A-Za-z0-9._-]{8,}\b/g;
-const BEARER_REGEX = /\bBearer\s+[A-Za-z0-9\-._~+/]+=*\b/gi;
+const BEARER_REGEX =
+  /\bBearer\s+[A-Za-z0-9\-._~+/]+=*(?=[^A-Za-z0-9\-._~+/=]|$)/gi;
 const AUTH_HEADER_REGEX =
   /\b(authorization|proxy-authorization)\s*([:=])\s*([^\r\n]+)/gi;
 const COOKIE_HEADER_REGEX = /\b(set-cookie|cookie)\s*([:=])\s*([^\r\n]+)/gi;
@@ -796,7 +797,12 @@ function redactSensitiveValueByType(
   rawValue: unknown,
   referenceContext?: RedactionReferenceContext
 ): string {
-  const rawString = String(rawValue ?? '');
+  const rawString =
+    typeof rawValue === 'string'
+      ? rawValue
+      : rawValue != null && typeof rawValue === 'object'
+        ? safeSerialize(rawValue)
+        : String(rawValue ?? '');
   if (isExactPlaceholder(rawString)) {
     return rawString;
   }
