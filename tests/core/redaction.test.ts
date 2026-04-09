@@ -380,6 +380,53 @@ describe('PII redaction', () => {
     expect(redacted.metadata).toBeUndefined();
   });
 
+  it('should redact camelCase and PascalCase sensitive keys by normalized key name', () => {
+    const config = resolveRedactionConfig({ enabled: true });
+    const referenceContext = createRedactionReferenceContext();
+
+    const redacted = redactAttributes(
+      {
+        accessToken: 'Bearer access-secret',
+        refreshToken: 'refresh-secret',
+        clientSecret: 'client-secret',
+        confirmEmail: 'alice@example.com',
+        userEmail: 'alice@example.com',
+        userPhone: '+1 (415) 555-1212',
+        SessionName: 'alice@example.com',
+      },
+      config,
+      referenceContext
+    );
+
+    expect(redacted.value?.accessToken).toBe('[REDACTED_SECRET_A]');
+    expect(redacted.value?.refreshToken).toBe('[REDACTED_SECRET_B]');
+    expect(redacted.value?.clientSecret).toBe('[REDACTED_SECRET_C]');
+    expect(redacted.value?.confirmEmail).toBe('[REDACTED_EMAIL_A]');
+    expect(redacted.value?.userEmail).toBe('[REDACTED_EMAIL_A]');
+    expect(redacted.value?.userPhone).toBe('[REDACTED_PHONE_A]');
+    expect(redacted.value?.SessionName).toBe('[REDACTED_EMAIL_A]');
+  });
+
+  it('should normalize fully-populated config objects before reuse checks', () => {
+    const resolved = resolveRedactionConfig({
+      enabled: true,
+      redactInputs: true,
+      redactOutputs: true,
+      redactAttributes: true,
+      redactErrors: true,
+      redactSessionNames: true,
+      redactTagValues: true,
+      sensitiveKeys: ['accessToken', 'ClientSecret'],
+      customPatterns: ['secret-value'],
+    });
+
+    expect(resolved.sensitiveKeys).toEqual(
+      expect.arrayContaining(['access_token', 'client_secret', 'email'])
+    );
+    expect(resolved.customPatterns[0]).toBeInstanceOf(RegExp);
+    expect(resolved.customPatterns[0].source).toContain('secret-value');
+  });
+
   it('should reuse identical authorization and cookie header values and separate different ones', () => {
     const span = new Span('header-redaction', undefined, {
       enabled: true,

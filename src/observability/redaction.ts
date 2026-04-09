@@ -113,7 +113,6 @@ export function resolveRedactionConfig(
   }
 
   const enabled = config?.enabled ?? false;
-
   return {
     _resolved: true,
     enabled,
@@ -1025,10 +1024,11 @@ function looksLikeJson(value: string): boolean {
 function normalizeKey(value: string): string {
   return value
     .trim()
+    .replace(/([A-Z]+)([A-Z][a-z0-9]+)/g, '$1_$2')
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
     .toLowerCase()
-    .replace(/[\s-]+/g, '_');
+    .replace(/[\s./-]+/g, '_')
+    .replace(/_+/g, '_');
 }
 
 function resetGlobalRegexes(): void {
