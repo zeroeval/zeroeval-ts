@@ -14,7 +14,7 @@
 import * as ze from 'zeroeval';
 
 ze.init({
-  apiKey: 'demo-api-key',
+  apiKey: 'placeholder',
   redaction: {
     enabled: true,
   },
@@ -53,7 +53,7 @@ async function main(): Promise<void> {
       email: 'alice@example.com',
       phone: '+1 (415) 555-1212',
       password: 'hunter2',
-      apiKey: 'sk-live-abcdef1234567890',
+      apiKey: 'placeholder',
       confirmEmail: 'alice@example.com',
     },
     'Send follow-up to alice@example.com and bob@example.com. Session cookie: abc123'

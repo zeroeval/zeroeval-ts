@@ -7,6 +7,7 @@ import { BackendSpanWriter } from '../../src/observability/writer';
 import {
   createRedactionReferenceContext,
   redactAttributes,
+  redactSessionIdentifier,
   resolveRedactionConfig,
 } from '../../src/observability/redaction';
 import { MockSpanWriter } from '../setup';
@@ -324,6 +325,54 @@ describe('PII redaction', () => {
     expect(payload[0].output_data).not.toContain('shared-token');
   });
 
+  it('should redact sensitive keys inside JSON string payloads in writer fail-safe redaction', async () => {
+    const writer = new BackendSpanWriter();
+    writer.setRedactionConfig({ enabled: true });
+
+    const requestBodies: string[] = [];
+    global.fetch = vi.fn().mockImplementation(async (_url, init) => {
+      requestBodies.push(String(init?.body ?? ''));
+      return {
+        ok: true,
+        status: 200,
+        text: async () => 'ok',
+        headers: { forEach: () => undefined },
+      } as Response;
+    });
+
+    await writer.write([
+      {
+        span_id: 'span-json-keys',
+        trace_id: 'trace-json-keys',
+        name: 'writer-json-key-redaction',
+        start_time: new Date().toISOString(),
+        end_time: new Date().toISOString(),
+        duration_ms: 1,
+        status: 'ok',
+        attributes: {},
+        input_data:
+          '{"password":"hunter2","apiKey":"not-a-real-key","nested":{"confirmEmail":"alice@example.com"}}',
+        output_data:
+          '{"refreshToken":"refresh-placeholder","clientSecret":"client-placeholder"}',
+        tags: {},
+        trace_tags: {},
+        session_tags: {},
+      },
+    ]);
+
+    const payload = JSON.parse(requestBodies[0]);
+
+    expect(typeof payload[0].input_data).toBe('string');
+    expect(typeof payload[0].output_data).toBe('string');
+    expect(payload[0].input_data).toContain('[REDACTED_SECRET_');
+    expect(payload[0].input_data).toContain('[REDACTED_EMAIL_');
+    expect(payload[0].input_data).not.toContain('hunter2');
+    expect(payload[0].input_data).not.toContain('alice@example.com');
+    expect(payload[0].output_data).toContain('[REDACTED_SECRET_');
+    expect(payload[0].output_data).not.toContain('refresh-placeholder');
+    expect(payload[0].output_data).not.toContain('client-placeholder');
+  });
+
   it('should respect per-field redaction flags in writer fail-safe redaction', async () => {
     const writer = new BackendSpanWriter();
     writer.setRedactionConfig({
@@ -425,6 +474,26 @@ describe('PII redaction', () => {
     );
     expect(resolved.customPatterns[0]).toBeInstanceOf(RegExp);
     expect(resolved.customPatterns[0].source).toContain('secret-value');
+  });
+
+  it('should only exact-match secret and custom patterns for session identifiers', () => {
+    const config = resolveRedactionConfig({
+      enabled: true,
+      customPatterns: [/secret-token/g],
+    });
+
+    expect(
+      redactSessionIdentifier('prefix Bearer shared-token', config).value
+    ).toBe('prefix Bearer shared-token');
+    expect(
+      redactSessionIdentifier('prefix secret-token suffix', config).value
+    ).toBe('prefix secret-token suffix');
+    expect(redactSessionIdentifier('Bearer shared-token', config).value).toBe(
+      '[REDACTED_SECRET]'
+    );
+    expect(redactSessionIdentifier('secret-token', config).value).toBe(
+      '[REDACTED_SECRET]'
+    );
   });
 
   it('should reuse identical authorization and cookie header values and separate different ones', () => {

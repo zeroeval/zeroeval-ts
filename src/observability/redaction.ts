@@ -172,7 +172,7 @@ export function redactInputTextValue(
     return { value };
   }
 
-  return redactStringValue(value, config, referenceContext);
+  return redactStringValue(value, config, referenceContext, true);
 }
 
 export function redactOutputTextValue(
@@ -184,24 +184,20 @@ export function redactOutputTextValue(
     return { value };
   }
 
-  return redactStringValue(value, config, referenceContext);
+  return redactStringValue(value, config, referenceContext, true);
 }
 
 function redactStringValue(
   value: string,
   config: ResolvedRedactionConfig,
-  referenceContext?: RedactionReferenceContext
+  referenceContext?: RedactionReferenceContext,
+  parseJsonStrings = false
 ): RedactionResult<string> {
   if (!config.enabled) {
     return { value };
   }
 
-  return redactString(
-    value,
-    config,
-    { parseJsonStrings: false },
-    referenceContext
-  );
+  return redactString(value, config, { parseJsonStrings }, referenceContext);
 }
 
 export function redactAttributes(
@@ -838,14 +834,7 @@ function detectExactMatchType(
   }
 
   for (const pattern of config.customPatterns) {
-    pattern.lastIndex = 0;
-    const customMatch = pattern.exec(trimmed);
-    pattern.lastIndex = 0;
-    if (
-      customMatch &&
-      customMatch.index === 0 &&
-      customMatch[0].length === trimmed.length
-    ) {
+    if (exactMatchesEntireString(pattern, trimmed)) {
       return 'SECRET';
     }
   }

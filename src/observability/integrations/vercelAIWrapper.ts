@@ -214,7 +214,7 @@ function wrapVercelAIFunction<T extends VercelAIFunction>(
         }
         // For generateObject
         else if ('object' in result) {
-          const output = result.object ?? {};
+          const output = result.object || {};
 
           if (result.usage) {
             span.attributes.inputTokens = result.usage.promptTokens;

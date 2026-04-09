@@ -17,7 +17,9 @@ describe('wrapper redaction', () => {
     (tracer as any)._traceBuckets = {};
     (tracer as any)._activeTraceCounts = {};
     (tracer as any)._traceTags = {};
+    (tracer as any)._traceTagMetadata = {};
     (tracer as any)._sessionTags = {};
+    (tracer as any)._sessionTagMetadata = {};
     (tracer as any)._activeSessionCounts = {};
     (tracer as any)._traceRedactionContexts = {};
     tracer.configure({
@@ -189,5 +191,26 @@ describe('wrapper redaction', () => {
     expect(mockWriter.spans).toHaveLength(1);
     expect(mockWriter.spans[0].input_data).toContain('[REDACTED_EMAIL_A]');
     expect(mockWriter.spans[0].input_data).not.toContain('[REDACTED_SECRET');
+  });
+
+  it('should fall back to an empty object for falsy Vercel generateObject results', async () => {
+    const ai = wrapVercelAI({
+      generateObject: async () => ({
+        object: '',
+        usage: {
+          promptTokens: 2,
+          completionTokens: 1,
+        },
+      }),
+    });
+
+    await ai.generateObject({
+      model: 'gpt-4.1-mini',
+      prompt: 'return empty object',
+    });
+    await tracer.flush();
+
+    expect(mockWriter.spans).toHaveLength(1);
+    expect(mockWriter.spans[0].output_data).toBe('{}');
   });
 });

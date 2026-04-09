@@ -454,10 +454,6 @@ export class Tracer {
     );
   }
 
-  getRedactionConfig(): ResolvedRedactionConfig {
-    return this._redaction;
-  }
-
   sanitizeTags(
     tags: Record<string, string>,
     traceId?: string,
