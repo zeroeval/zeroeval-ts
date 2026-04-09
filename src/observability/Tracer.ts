@@ -302,8 +302,6 @@ export class Tracer {
         this._activeSessionCounts[span.sessionLookupId] -= 1;
         if (this._activeSessionCounts[span.sessionLookupId] === 0) {
           delete this._activeSessionCounts[span.sessionLookupId];
-          delete this._sessionTags[span.sessionLookupId];
-          delete this._sessionTagMetadata[span.sessionLookupId];
         }
       }
 

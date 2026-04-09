@@ -398,7 +398,12 @@ function redactValue(
       }
     }
 
-    return redactString(value, config, {}, context.referenceContext);
+    return redactString(
+      value,
+      config,
+      { parseJsonStrings: false },
+      context.referenceContext
+    );
   }
 
   if (Array.isArray(value)) {
