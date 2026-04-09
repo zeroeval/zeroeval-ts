@@ -312,9 +312,20 @@ export class Tracer {
       matchingSpans.push(span);
     }
 
-    const matchedSpan = matchingSpans.find(
-      (span) => span.sessionLookupId === sessionId
+    const matchedSpans = matchingSpans.filter(
+      (span) =>
+        span.sessionLookupId === sessionId || span.sessionId === sessionId
     );
+    const matchedSpan = matchedSpans[0];
+    const sessionTagKeys = new Set<string>();
+    for (const span of matchedSpans) {
+      if (span.sessionLookupId) {
+        sessionTagKeys.add(span.sessionLookupId);
+      }
+    }
+    if (sessionTagKeys.size === 0) {
+      sessionTagKeys.add(sessionId);
+    }
     const redactedTags = redactTags(
       tags,
       this._redaction,
@@ -329,14 +340,16 @@ export class Tracer {
       ).value ??
       '[session]';
     logger.debug(`Adding session tags to ${logSessionId}:`, redactedTags.value);
-    this._sessionTags[sessionId] = {
-      ...(this._sessionTags[sessionId] ?? {}),
-      ...(redactedTags.value ?? {}),
-    };
+    for (const sessionTagKey of sessionTagKeys) {
+      this._sessionTags[sessionTagKey] = {
+        ...(this._sessionTags[sessionTagKey] ?? {}),
+        ...(redactedTags.value ?? {}),
+      };
+    }
 
-    matchingSpans
-      .filter((s) => s.sessionLookupId === sessionId)
-      .forEach((s) => Object.assign(s.tags, redactedTags.value));
+    matchedSpans.forEach((span) =>
+      Object.assign(span.tags, redactedTags.value)
+    );
   }
 
   isActiveTrace(traceId: string): boolean {

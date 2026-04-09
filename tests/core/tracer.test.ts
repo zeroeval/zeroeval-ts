@@ -344,6 +344,36 @@ describe('Tracer', () => {
       );
     });
 
+    it('should propagate session tags when called with the redacted public session identifier', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const rawSessionId = 'alice@example.com';
+
+      const span1 = tracer.startSpan('span1', { sessionId: rawSessionId });
+      const publicSessionId = span1.sessionId;
+      expect(publicSessionId).toContain('[REDACTED_EMAIL_');
+      tracer.endSpan(span1);
+
+      tracer.addSessionTags(publicSessionId, {
+        customer_email: rawSessionId,
+      });
+
+      const span2 = tracer.startSpan('span2', { sessionId: rawSessionId });
+      tracer.endSpan(span2);
+
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(2);
+      expect(mockWriter.spans[0].tags.customer_email).toBe(
+        '[REDACTED_EMAIL_A]'
+      );
+      expect(mockWriter.spans[1].tags.customer_email).toBe(
+        '[REDACTED_EMAIL_A]'
+      );
+    });
+
     it('should not log raw session identifiers when adding session tags with redaction enabled', () => {
       tracer.configure({
         redaction: { enabled: true },
