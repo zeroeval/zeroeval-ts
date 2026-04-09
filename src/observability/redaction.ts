@@ -232,13 +232,17 @@ export function redactTags(
 
     if (isSensitiveKey(key, config)) {
       const type = detectRedactionType(rawValue);
+      const redactedValue = redactSensitiveValueByType(
+        type,
+        rawValue,
+        referenceContext
+      );
       redacted = {
-        value: redactSensitiveValueByType(type, rawValue, referenceContext),
-        metadata: {
-          enabled: true,
-          count: 1,
-          types: [type],
-        },
+        value: redactedValue,
+        metadata:
+          redactedValue !== rawValue
+            ? { enabled: true, count: 1, types: [type] }
+            : undefined,
       };
     } else {
       redacted = redactString(rawValue, config, {}, referenceContext);
@@ -466,17 +470,17 @@ function redactObject(
 
       if (isSensitiveKey(key, config)) {
         const type = detectRedactionType(rawValue);
+        const redactedValue = redactSensitiveValueByType(
+          type,
+          rawValue,
+          context.referenceContext
+        );
         redacted = {
-          value: redactSensitiveValueByType(
-            type,
-            rawValue,
-            context.referenceContext
-          ),
-          metadata: {
-            enabled: true,
-            count: 1,
-            types: [type],
-          },
+          value: redactedValue,
+          metadata:
+            redactedValue !== rawValue
+              ? { enabled: true, count: 1, types: [type] }
+              : undefined,
         };
       } else {
         redacted = redactValue(rawValue, config, context);
@@ -834,11 +838,16 @@ function detectExactMatchType(
   }
 
   for (const pattern of config.customPatterns) {
-    if (pattern.test(trimmed)) {
-      pattern.lastIndex = 0;
+    pattern.lastIndex = 0;
+    const customMatch = pattern.exec(trimmed);
+    pattern.lastIndex = 0;
+    if (
+      customMatch &&
+      customMatch.index === 0 &&
+      customMatch[0].length === trimmed.length
+    ) {
       return 'SECRET';
     }
-    pattern.lastIndex = 0;
   }
 
   return null;
