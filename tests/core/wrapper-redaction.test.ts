@@ -161,4 +161,33 @@ describe('wrapper redaction', () => {
     expect(serializedAttributes).not.toContain('bob@example.com');
     expect(serializedAttributes).not.toContain('secret-token');
   });
+
+  it('should preserve existing input placeholders when LangChain callback handler ends a span', async () => {
+    const handler = new ZeroEvalCallbackHandler();
+
+    await handler.handleChainStart(
+      {
+        id: ['langchain', 'chains', 'ExampleChain'],
+        name: 'ExampleChain',
+      } as any,
+      {
+        email: 'bob@example.com',
+      },
+      'run-chain-1'
+    );
+
+    await handler.handleChainEnd(
+      {
+        result: 'ok',
+      } as any,
+      'run-chain-1'
+    );
+
+    await tracer.flush();
+    handler.destroy();
+
+    expect(mockWriter.spans).toHaveLength(1);
+    expect(mockWriter.spans[0].input_data).toContain('[REDACTED_EMAIL_A]');
+    expect(mockWriter.spans[0].input_data).not.toContain('[REDACTED_SECRET');
+  });
 });

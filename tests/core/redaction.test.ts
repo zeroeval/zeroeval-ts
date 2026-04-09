@@ -324,6 +324,49 @@ describe('PII redaction', () => {
     expect(payload[0].output_data).not.toContain('shared-token');
   });
 
+  it('should respect per-field redaction flags in writer fail-safe redaction', async () => {
+    const writer = new BackendSpanWriter();
+    writer.setRedactionConfig({
+      enabled: true,
+      redactInputs: false,
+      redactOutputs: true,
+    });
+
+    const requestBodies: string[] = [];
+    global.fetch = vi.fn().mockImplementation(async (_url, init) => {
+      requestBodies.push(String(init?.body ?? ''));
+      return {
+        ok: true,
+        status: 200,
+        text: async () => 'ok',
+        headers: { forEach: () => undefined },
+      } as Response;
+    });
+
+    await writer.write([
+      {
+        span_id: 'span-4',
+        trace_id: 'trace-4',
+        name: 'writer-redaction-flags',
+        start_time: new Date().toISOString(),
+        end_time: new Date().toISOString(),
+        duration_ms: 1,
+        status: 'ok',
+        attributes: {},
+        input_data: 'alice@example.com',
+        output_data: 'alice@example.com',
+        tags: {},
+        trace_tags: {},
+        session_tags: {},
+      },
+    ]);
+
+    const payload = JSON.parse(requestBodies[0]);
+
+    expect(payload[0].input_data).toBe('alice@example.com');
+    expect(payload[0].output_data).toContain('[REDACTED_EMAIL_A]');
+  });
+
   it('should not inflate metadata for already-redacted sensitive-key object values', () => {
     const config = resolveRedactionConfig({ enabled: true });
     const referenceContext = createRedactionReferenceContext();

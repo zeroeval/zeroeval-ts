@@ -98,9 +98,30 @@ const DEFAULT_SENSITIVE_KEYS = [
 
 const REDACTION_KEY = 'zeroeval_redaction';
 
+function isResolvedRedactionConfig(
+  config?: Partial<RedactionConfig> | ResolvedRedactionConfig
+): config is ResolvedRedactionConfig {
+  return (
+    !!config &&
+    typeof config.enabled === 'boolean' &&
+    typeof config.redactInputs === 'boolean' &&
+    typeof config.redactOutputs === 'boolean' &&
+    typeof config.redactAttributes === 'boolean' &&
+    typeof config.redactErrors === 'boolean' &&
+    typeof config.redactSessionNames === 'boolean' &&
+    typeof config.redactTagValues === 'boolean' &&
+    Array.isArray(config.sensitiveKeys) &&
+    Array.isArray(config.customPatterns)
+  );
+}
+
 export function resolveRedactionConfig(
-  config?: Partial<RedactionConfig>
+  config?: Partial<RedactionConfig> | ResolvedRedactionConfig
 ): ResolvedRedactionConfig {
+  if (isResolvedRedactionConfig(config)) {
+    return config;
+  }
+
   const enabled = config?.enabled ?? false;
 
   return {
@@ -154,6 +175,38 @@ export function redactOutputValue(
 }
 
 export function redactTextValue(
+  value: string,
+  config: ResolvedRedactionConfig,
+  referenceContext?: RedactionReferenceContext
+): RedactionResult<string> {
+  return redactStringValue(value, config, referenceContext);
+}
+
+export function redactInputTextValue(
+  value: string,
+  config: ResolvedRedactionConfig,
+  referenceContext?: RedactionReferenceContext
+): RedactionResult<string> {
+  if (!config.enabled || !config.redactInputs) {
+    return { value };
+  }
+
+  return redactStringValue(value, config, referenceContext);
+}
+
+export function redactOutputTextValue(
+  value: string,
+  config: ResolvedRedactionConfig,
+  referenceContext?: RedactionReferenceContext
+): RedactionResult<string> {
+  if (!config.enabled || !config.redactOutputs) {
+    return { value };
+  }
+
+  return redactStringValue(value, config, referenceContext);
+}
+
+function redactStringValue(
   value: string,
   config: ResolvedRedactionConfig,
   referenceContext?: RedactionReferenceContext

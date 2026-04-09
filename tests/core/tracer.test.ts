@@ -127,6 +127,18 @@ describe('Tracer', () => {
       // Should not have any spans
       expect(mockWriter.spans).toHaveLength(0);
     });
+
+    it('should not corrupt tracer bookkeeping when spans are ended after shutdown', () => {
+      tracer.shutdown();
+
+      const span = tracer.startSpan('after-shutdown');
+      span.setIO('alice@example.com', 'ok');
+      tracer.endSpan(span);
+
+      expect(tracer._activeTraceCounts).toEqual({});
+      expect(tracer._traceBuckets).toEqual({});
+      expect(tracer._buffer).toEqual([]);
+    });
   });
 
   describe('async context management', () => {
@@ -480,6 +492,100 @@ describe('Tracer', () => {
       expect(mockWriter.spans[0].tags.escalation_email).toBe(
         '[REDACTED_EMAIL_B]'
       );
+    });
+
+    it('should preserve redaction metadata for tags added after span creation', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const sessionId = 'alice@example.com';
+      const root = tracer.startSpan('root', { sessionId });
+      const child = tracer.startSpan('child');
+
+      tracer.addTraceTags(root.traceId, {
+        support_email: 'alice@example.com',
+      });
+      tracer.addSessionTags(sessionId, {
+        contact_phone: '+1 (415) 555-1212',
+      });
+
+      tracer.endSpan(child);
+      tracer.endSpan(root);
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(2);
+      for (const span of mockWriter.spans) {
+        expect(span.trace_tags.support_email).toBe('[REDACTED_EMAIL_A]');
+        expect(span.session_tags.contact_phone).toBe('[REDACTED_PHONE_A]');
+        expect(span.attributes.zeroeval_redaction).toMatchObject({
+          enabled: true,
+        });
+        expect(span.attributes.zeroeval_redaction.types).toEqual(
+          expect.arrayContaining(['EMAIL', 'PHONE'])
+        );
+      }
+    });
+
+    it('should clean up trace and session tag bookkeeping after flush', async () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const sessionId = 'alice@example.com';
+      const span = tracer.startSpan('cleanup-span', { sessionId });
+      tracer.endSpan(span);
+
+      tracer.addTraceTags(span.traceId, {
+        support_email: 'alice@example.com',
+      });
+      tracer.addSessionTags(span.sessionId, {
+        contact_phone: '+1 (415) 555-1212',
+      });
+
+      expect(Object.keys(tracer._traceTags)).toHaveLength(1);
+      expect(Object.keys(tracer._traceTagMetadata)).toHaveLength(1);
+      expect(Object.keys(tracer._sessionTags)).toHaveLength(1);
+      expect(Object.keys(tracer._sessionTagMetadata)).toHaveLength(1);
+
+      await tracer.flush();
+
+      expect(tracer._traceTags).toEqual({});
+      expect(tracer._traceTagMetadata).toEqual({});
+      expect(tracer._sessionTags).toEqual({});
+      expect(tracer._sessionTagMetadata).toEqual({});
+    });
+
+    it('should not retain session tag buckets when no active or buffered spans match', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      tracer.addSessionTags('orphan@example.com', {
+        customer_email: 'orphan@example.com',
+      });
+
+      expect(tracer._sessionTags).toEqual({});
+      expect(tracer._sessionTagMetadata).toEqual({});
+    });
+
+    it('should attach metadata when sanitizeTags is used with attributes', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const attributes: Record<string, unknown> = {};
+      const tags = tracer.sanitizeTags(
+        { customer_email: 'alice@example.com' },
+        undefined,
+        attributes
+      );
+
+      expect(tags.customer_email).toBe('[REDACTED_EMAIL]');
+      expect(attributes.zeroeval_redaction).toMatchObject({
+        enabled: true,
+        types: ['EMAIL'],
+      });
     });
   });
 
