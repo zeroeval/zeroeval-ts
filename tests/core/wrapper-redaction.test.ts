@@ -13,6 +13,13 @@ describe('wrapper redaction', () => {
     mockWriter = new MockSpanWriter();
     (tracer as any)._writer = mockWriter;
     (tracer as any)._shuttingDown = false;
+    (tracer as any)._buffer = [];
+    (tracer as any)._traceBuckets = {};
+    (tracer as any)._activeTraceCounts = {};
+    (tracer as any)._traceTags = {};
+    (tracer as any)._sessionTags = {};
+    (tracer as any)._activeSessionCounts = {};
+    (tracer as any)._traceRedactionContexts = {};
     tracer.configure({
       redaction: { enabled: true },
     });

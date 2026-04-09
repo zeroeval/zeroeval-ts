@@ -391,6 +391,36 @@ describe('Tracer', () => {
       expect(mockWriter.spans[0].input_data).toContain('[REDACTED_EMAIL_A]');
       expect(mockWriter.spans[1].input_data).toContain('[REDACTED_EMAIL_A]');
     });
+
+    it('should preserve trace redaction context for trace tags added after trace completion but before flush', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const span = tracer.startSpan('completed-trace', {
+        attributes: {
+          owner_email: 'seb@zeroeval.com',
+        },
+      });
+      span.setIO('contact seb@zeroeval.com', undefined);
+      tracer.endSpan(span);
+
+      tracer.addTraceTags(span.traceId, {
+        support_email: 'seb@zeroeval.com',
+        escalation_email: 'other@zeroeval.com',
+      });
+
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(1);
+      expect(mockWriter.spans[0].attributes.owner_email).toBe(
+        '[REDACTED_EMAIL_A]'
+      );
+      expect(mockWriter.spans[0].tags.support_email).toBe('[REDACTED_EMAIL_A]');
+      expect(mockWriter.spans[0].tags.escalation_email).toBe(
+        '[REDACTED_EMAIL_B]'
+      );
+    });
   });
 
   describe('error handling', () => {

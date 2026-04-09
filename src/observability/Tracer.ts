@@ -246,7 +246,6 @@ export class Tracer {
       const ordered = traceBucket.sort((a) => (a.parentId ? 1 : -1));
       delete this._traceBuckets[span.traceId];
       delete this._traceTags[span.traceId];
-      delete this._traceRedactionContexts[span.traceId];
       this._buffer.push(...ordered);
 
       if (span.sessionLookupId) {
@@ -361,11 +360,16 @@ export class Tracer {
 
     this._lastFlush = Date.now();
     const spansToFlush = this._buffer.splice(0);
+    const flushedTraceIds = new Set(spansToFlush.map((span) => span.traceId));
 
     try {
       const startTime = Date.now();
       await this._writer.write(spansToFlush);
       const duration = Date.now() - startTime;
+
+      for (const traceId of flushedTraceIds) {
+        delete this._traceRedactionContexts[traceId];
+      }
 
       logger.info(
         `[ZeroEval] Successfully flushed ${spanCount} spans in ${duration}ms`

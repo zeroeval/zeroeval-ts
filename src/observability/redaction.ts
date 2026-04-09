@@ -60,8 +60,8 @@ const API_KEY_REGEX =
   /\b(?:sk|pk|rk|ghp|gho|ghu|ghs|github_pat|xox[baprs]-|AIza|ya29|AKIA|ASIA)[A-Za-z0-9._-]{8,}\b/g;
 const BEARER_REGEX = /\bBearer\s+[A-Za-z0-9\-._~+/]+=*\b/gi;
 const AUTH_HEADER_REGEX =
-  /\b(authorization|proxy-authorization)\s*[:=]\s*([^\r\n]+)/gi;
-const COOKIE_HEADER_REGEX = /\b(set-cookie|cookie)\s*[:=]\s*([^\r\n]+)/gi;
+  /\b(authorization|proxy-authorization)\s*([:=])\s*([^\r\n]+)/gi;
+const COOKIE_HEADER_REGEX = /\b(set-cookie|cookie)\s*([:=])\s*([^\r\n]+)/gi;
 const PHONE_REGEX = /(?:\+?\d[\d().\s-]{7,}\d)/g;
 const PAN_CANDIDATE_REGEX = /\b(?:\d[ -]?){13,19}\b/g;
 const EXACT_PLACEHOLDER_REGEX = /^\[REDACTED_[A-Z]+(?:_[A-Z0-9]+)?\]$/;
@@ -474,8 +474,8 @@ function redactString(
     nextValue,
     AUTH_HEADER_REGEX,
     'SECRET',
-    (_match, headerName, headerValue) =>
-      `${headerName}: ${redactSensitiveValueByType(
+    (_match, headerName, separator, headerValue) =>
+      `${headerName}${separator} ${redactSensitiveValueByType(
         'SECRET',
         headerValue,
         referenceContext
@@ -489,8 +489,8 @@ function redactString(
     nextValue,
     COOKIE_HEADER_REGEX,
     'SECRET',
-    (_match, headerName, headerValue) =>
-      `${headerName}: ${redactSensitiveValueByType(
+    (_match, headerName, separator, headerValue) =>
+      `${headerName}${separator} ${redactSensitiveValueByType(
         'SECRET',
         headerValue,
         referenceContext

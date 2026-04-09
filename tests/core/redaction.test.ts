@@ -272,4 +272,47 @@ describe('PII redaction', () => {
     expect(requestBodies[0]).toContain('[REDACTED_SECRET_A]');
     expect(requestBodies[0]).not.toContain('alice@example.com');
   });
+
+  it('should reuse identical authorization and cookie header values and separate different ones', () => {
+    const span = new Span('header-redaction', undefined, {
+      enabled: true,
+    });
+
+    span.setIO(
+      [
+        'Authorization: Bearer shared-token',
+        'authorization: Bearer shared-token',
+        'Cookie: session=abc123',
+        'cookie: session=abc123',
+        'Authorization: Bearer other-token',
+        'Cookie: session=xyz999',
+      ].join('\n'),
+      undefined
+    );
+
+    const json = span.toJSON();
+    const secretTokens = Array.from(
+      json.input_data.matchAll(
+        /(Authorization|authorization|Cookie|cookie): (\[REDACTED_SECRET_[A-Z]+\])/g
+      )
+    ).map((match) => ({
+      name: match[1],
+      token: match[2],
+    }));
+
+    expect(secretTokens).toEqual([
+      { name: 'Authorization', token: expect.any(String) },
+      { name: 'authorization', token: expect.any(String) },
+      { name: 'Cookie', token: expect.any(String) },
+      { name: 'cookie', token: expect.any(String) },
+      { name: 'Authorization', token: expect.any(String) },
+      { name: 'Cookie', token: expect.any(String) },
+    ]);
+    expect(secretTokens[0].token).toBe(secretTokens[1].token);
+    expect(secretTokens[2].token).toBe(secretTokens[3].token);
+    expect(secretTokens[0].token).not.toBe(secretTokens[4].token);
+    expect(secretTokens[2].token).not.toBe(secretTokens[5].token);
+    expect(json.input_data).not.toContain('shared-token');
+    expect(json.input_data).not.toContain('abc123');
+  });
 });
