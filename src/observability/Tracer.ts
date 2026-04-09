@@ -400,14 +400,13 @@ export class Tracer {
 
     let matchedSpans = publicMatchedSpans;
     if (rawMatchedSpans.length === 0) {
-      const matchedTraceIds = new Set(matchedSpans.map((span) => span.traceId));
       const matchedSessionLookupIds = new Set(
         matchedSpans
           .map((span) => span.sessionLookupId)
           .filter((value): value is string => Boolean(value))
       );
 
-      if (matchedTraceIds.size !== 1 || matchedSessionLookupIds.size !== 1) {
+      if (matchedSessionLookupIds.size !== 1) {
         logger.debug(
           `Skipping session tags for ${logSessionId}; public session identifier matched multiple traces or session buckets`
         );

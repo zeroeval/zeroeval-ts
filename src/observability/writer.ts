@@ -58,6 +58,7 @@ export class BackendSpanWriter implements SpanWriter {
     }> = [];
     const traceIds = new Set<string>();
     const sessionIds = new Set<string>();
+    const sessionLookupIds = new Set<string>();
     const traceReferenceContexts = new Map<string, RedactionReferenceContext>();
 
     const payload = spans.map((s: any) => {
@@ -153,6 +154,9 @@ export class BackendSpanWriter implements SpanWriter {
       }
       traceIds.add(base.trace_id);
       if (base.session_id) sessionIds.add(base.session_id);
+      const lookupId =
+        typeof s?.sessionLookupId === 'string' ? s.sessionLookupId : undefined;
+      if (lookupId) sessionLookupIds.add(lookupId);
 
       // Extract kind from attributes (default to 'generic')
       const kind = base.attributes?.kind ?? 'generic';
@@ -242,7 +246,8 @@ export class BackendSpanWriter implements SpanWriter {
         // After spans persisted, send buffered trace/session signals
         await this.flushTraceSessionSignals(
           Array.from(traceIds),
-          Array.from(sessionIds)
+          Array.from(sessionIds),
+          Array.from(sessionLookupIds)
         );
       }
     } catch (err) {
@@ -295,7 +300,8 @@ export class BackendSpanWriter implements SpanWriter {
 
   private async flushTraceSessionSignals(
     traceIds: string[],
-    sessionIds: string[]
+    sessionIds: string[],
+    sessionLookupIds: string[]
   ): Promise<void> {
     if (traceIds.length === 0 && sessionIds.length === 0) return;
 
@@ -319,7 +325,8 @@ export class BackendSpanWriter implements SpanWriter {
       }
     }
 
-    for (const sid of sessionIds) {
+    const lookupIds = new Set([...sessionIds, ...sessionLookupIds]);
+    for (const sid of lookupIds) {
       const signals = popPendingSessionSignals(sid);
       if (!signals) continue;
       for (const [name, sig] of Object.entries(signals)) {
