@@ -58,7 +58,7 @@ export class BackendSpanWriter implements SpanWriter {
     }> = [];
     const traceIds = new Set<string>();
     const sessionIds = new Set<string>();
-    const sessionLookupIds = new Set<string>();
+    const sessionLookupToRedacted = new Map<string, string>();
     const traceReferenceContexts = new Map<string, RedactionReferenceContext>();
 
     const payload = spans.map((s: any) => {
@@ -156,7 +156,9 @@ export class BackendSpanWriter implements SpanWriter {
       if (base.session_id) sessionIds.add(base.session_id);
       const lookupId =
         typeof s?.sessionLookupId === 'string' ? s.sessionLookupId : undefined;
-      if (lookupId) sessionLookupIds.add(lookupId);
+      if (lookupId && sessionId.value) {
+        sessionLookupToRedacted.set(lookupId, sessionId.value);
+      }
 
       // Extract kind from attributes (default to 'generic')
       const kind = base.attributes?.kind ?? 'generic';
@@ -247,7 +249,7 @@ export class BackendSpanWriter implements SpanWriter {
         await this.flushTraceSessionSignals(
           Array.from(traceIds),
           Array.from(sessionIds),
-          Array.from(sessionLookupIds)
+          sessionLookupToRedacted
         );
       }
     } catch (err) {
@@ -301,7 +303,7 @@ export class BackendSpanWriter implements SpanWriter {
   private async flushTraceSessionSignals(
     traceIds: string[],
     sessionIds: string[],
-    sessionLookupIds: string[]
+    sessionLookupToRedacted: Map<string, string>
   ): Promise<void> {
     if (traceIds.length === 0 && sessionIds.length === 0) return;
 
@@ -325,7 +327,23 @@ export class BackendSpanWriter implements SpanWriter {
       }
     }
 
-    const lookupIds = new Set([...sessionIds, ...sessionLookupIds]);
+    const lookupIds = new Set<string>(sessionIds);
+    for (const [rawId, redactedId] of sessionLookupToRedacted) {
+      if (!lookupIds.has(redactedId)) {
+        lookupIds.add(redactedId);
+      }
+      const signals = popPendingSessionSignals(rawId);
+      if (!signals) continue;
+      for (const [name, sig] of Object.entries(signals)) {
+        bulk.push({
+          entity_type: 'session',
+          entity_id: redactedId,
+          name,
+          value: sig.value,
+          signal_type: sig.type,
+        });
+      }
+    }
     for (const sid of lookupIds) {
       const signals = popPendingSessionSignals(sid);
       if (!signals) continue;
