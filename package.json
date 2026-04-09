@@ -82,7 +82,8 @@
     "example:signals": "npm run build && npx ts-node --esm examples/06-signals.ts",
     "example:ai-stream-consume": "npm run build && npx ts-node --esm examples/07-ai-stream-consume.ts",
     "example:prompt": "npm run build && npx ts-node --esm examples/08-prompt.ts",
-    "example:vapi": "npm run build && npx ts-node --esm examples/09-vapi.ts"
+    "example:vapi": "npm run build && npx ts-node --esm examples/09-vapi.ts",
+    "example:pii-redaction": "npm run build && npx ts-node --esm examples/10-pii-redaction.ts"
   },
   "peerDependencies": {
     "@ai-sdk/openai": "^2.0.0",
