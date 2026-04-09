@@ -173,13 +173,13 @@ function wrapVercelAIFunction<T extends VercelAIFunction>(
 
     try {
       // Prepare input for tracing
-      let input: string;
+      let input: unknown;
       if (messages) {
-        input = JSON.stringify(messages);
+        input = messages;
       } else if (prompt) {
-        input = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
+        input = prompt;
       } else {
-        input = JSON.stringify(modifiedOptions);
+        input = modifiedOptions;
       }
 
       const result = await fn(modifiedOptions);
@@ -214,7 +214,7 @@ function wrapVercelAIFunction<T extends VercelAIFunction>(
         }
         // For generateObject
         else if ('object' in result) {
-          const output = result.object ? JSON.stringify(result.object) : '{}';
+          const output = result.object ?? {};
 
           if (result.usage) {
             span.attributes.inputTokens = result.usage.promptTokens;
@@ -236,7 +236,7 @@ function wrapVercelAIFunction<T extends VercelAIFunction>(
         }
         // For other results
         else {
-          span.setIO(input, JSON.stringify(result));
+          span.setIO(input, result);
         }
       } else {
         // If result is not an object, convert to string
@@ -272,7 +272,7 @@ function wrapVercelAIFunction<T extends VercelAIFunction>(
 function wrapStreamingResult(
   result: any,
   span: any,
-  input: string,
+  input: unknown,
   startTime: number
 ): any {
   // Create a proxy to intercept stream access
@@ -380,7 +380,7 @@ function wrapStreamingResult(
 async function* wrapAsyncIterator(
   iterator: AsyncIterable<any>,
   span: any,
-  input: string,
+  input: unknown,
   startTime: number,
   streamType: 'text' | 'full'
 ): AsyncIterable<any> {

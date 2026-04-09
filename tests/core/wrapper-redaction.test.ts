@@ -1,0 +1,155 @@
+import { HumanMessage } from '@langchain/core/messages';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { tracer } from '../../src/observability/Tracer';
+import { ZeroEvalCallbackHandler } from '../../src/observability/integrations/langchain/ZeroEvalCallbackHandler';
+import { wrapOpenAI } from '../../src/observability/integrations/openaiWrapper';
+import { wrapVercelAI } from '../../src/observability/integrations/vercelAIWrapper';
+import { MockSpanWriter } from '../setup';
+
+describe('wrapper redaction', () => {
+  let mockWriter: MockSpanWriter;
+
+  beforeEach(() => {
+    mockWriter = new MockSpanWriter();
+    (tracer as any)._writer = mockWriter;
+    (tracer as any)._shuttingDown = false;
+    tracer.configure({
+      redaction: { enabled: true },
+    });
+  });
+
+  afterEach(async () => {
+    await tracer.flush();
+    tracer.configure({
+      redaction: { enabled: false },
+    });
+    mockWriter.clear();
+  });
+
+  it('should redact OpenAI wrapper messages and outputs', async () => {
+    const client = wrapOpenAI({
+      chat: {
+        completions: {
+          create: async () => ({
+            choices: [
+              {
+                message: {
+                  content: 'Reach me at bob@example.com or +1 (415) 555-1212',
+                },
+              },
+            ],
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 12,
+            },
+          }),
+        },
+      },
+    } as any);
+
+    await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'user',
+          content:
+            'Email bob@example.com and use Authorization: Bearer live-secret',
+        },
+      ],
+    });
+    await tracer.flush();
+
+    expect(mockWriter.spans).toHaveLength(1);
+    const span = mockWriter.spans[0];
+    expect(span.attributes.messages[0].content).toContain('[REDACTED_EMAIL]');
+    expect(span.attributes.messages[0].content).toContain('[REDACTED_SECRET]');
+    expect(span.input_data).not.toContain('bob@example.com');
+    expect(span.output_data).toContain('[REDACTED_EMAIL]');
+    expect(span.output_data).toContain('[REDACTED_PHONE]');
+  });
+
+  it('should redact Vercel AI wrapper prompts and outputs', async () => {
+    const ai = wrapVercelAI({
+      generateText: async () => ({
+        text: 'JWT eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.foo.bar',
+        usage: {
+          promptTokens: 5,
+          completionTokens: 7,
+        },
+      }),
+    });
+
+    await ai.generateText({
+      model: 'gpt-4.1-mini',
+      prompt: 'Call me at +1 (415) 555-1212',
+    });
+    await tracer.flush();
+
+    expect(mockWriter.spans).toHaveLength(1);
+    const span = mockWriter.spans[0];
+    expect(span.input_data).toContain('[REDACTED_PHONE]');
+    expect(span.output_data).toContain('[REDACTED_SECRET]');
+  });
+
+  it('should redact LangChain callback handler inputs, outputs, and tool args', async () => {
+    const handler = new ZeroEvalCallbackHandler();
+
+    await handler.handleChatModelStart(
+      {
+        id: ['langchain', 'chat_models', 'ChatOpenAI'],
+        name: 'ChatOpenAI',
+      } as any,
+      [[new HumanMessage('Contact bob@example.com')]],
+      'run-1',
+      undefined,
+      {
+        options: {} as any,
+        invocation_params: {
+          model: 'gpt-4o',
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'lookup_user',
+                arguments:
+                  '{"email":"bob@example.com","token":"Bearer secret-token"}',
+              },
+            },
+          ],
+        },
+        batch_size: 1,
+      },
+      undefined,
+      {
+        arguments:
+          '{"email":"bob@example.com","authorization":"Bearer secret-token"}',
+      }
+    );
+
+    await handler.handleLLMEnd(
+      {
+        llmOutput: {
+          tokenUsage: {
+            promptTokens: 10,
+            completionTokens: 4,
+          },
+        },
+        generations: [[{ text: 'Caller +1 (415) 555-1212' }]],
+      } as any,
+      'run-1'
+    );
+    await tracer.flush();
+    handler.destroy();
+
+    expect(mockWriter.spans).toHaveLength(1);
+    const span = mockWriter.spans[0];
+    const serializedAttributes = JSON.stringify(span.attributes);
+
+    expect(span.input_data).toContain('[REDACTED_EMAIL]');
+    expect(span.output_data).toContain('[REDACTED_PHONE]');
+    expect(serializedAttributes).toContain('[REDACTED_EMAIL]');
+    expect(serializedAttributes).toContain('[REDACTED_SECRET]');
+    expect(serializedAttributes).not.toContain('bob@example.com');
+    expect(serializedAttributes).not.toContain('secret-token');
+  });
+});

@@ -1,5 +1,14 @@
 import { randomUUID } from 'crypto';
 import type { Signal } from './signals';
+import {
+  attachRedactionMetadata,
+  redactErrorInfo,
+  redactInputValue,
+  redactOutputValue,
+  resolveRedactionConfig,
+  safeSerialize,
+} from './redaction';
+import type { RedactionConfig, ResolvedRedactionConfig } from './redaction';
 
 export interface ErrorInfo {
   code?: string;
@@ -30,10 +39,16 @@ export class Span {
 
   error?: ErrorInfo;
   status: 'ok' | 'error' = 'ok';
+  private readonly redactionConfig: ResolvedRedactionConfig;
 
-  constructor(name: string, traceId?: string) {
+  constructor(
+    name: string,
+    traceId?: string,
+    redactionConfig?: Partial<RedactionConfig>
+  ) {
     this.name = name;
     this.traceId = traceId ?? randomUUID();
+    this.redactionConfig = resolveRedactionConfig(redactionConfig);
   }
 
   end(): void {
@@ -45,18 +60,28 @@ export class Span {
   }
 
   setError(info: ErrorInfo): void {
-    this.error = info;
+    const redacted = redactErrorInfo(info, this.redactionConfig);
+    this.error = redacted.value;
+    attachRedactionMetadata(this.attributes, redacted.metadata);
     this.status = 'error';
   }
 
   setIO(input?: unknown, output?: unknown): void {
     if (input !== undefined) {
+      const redacted = redactInputValue(input, this.redactionConfig);
       this.inputData =
-        typeof input === 'string' ? input : JSON.stringify(input);
+        typeof redacted.value === 'string'
+          ? redacted.value
+          : safeSerialize(redacted.value);
+      attachRedactionMetadata(this.attributes, redacted.metadata);
     }
     if (output !== undefined) {
+      const redacted = redactOutputValue(output, this.redactionConfig);
       this.outputData =
-        typeof output === 'string' ? output : JSON.stringify(output);
+        typeof redacted.value === 'string'
+          ? redacted.value
+          : safeSerialize(redacted.value);
+      attachRedactionMetadata(this.attributes, redacted.metadata);
     }
   }
 

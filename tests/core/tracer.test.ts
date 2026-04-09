@@ -260,6 +260,51 @@ describe('Tracer', () => {
       expect(mockWriter.spans[0].tags).toEqual({ user: 'test-user' });
       expect(mockWriter.spans[1].tags).toEqual({ user: 'test-user' });
     });
+
+    it('should redact session names, sensitive tag values, and attributes', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const span1 = tracer.startSpan('root-span', {
+        sessionId: 'alice@example.com',
+        sessionName: 'Alice alice@example.com',
+        tags: {
+          customer_email: 'alice@example.com',
+        },
+        attributes: {
+          authorization: 'Bearer top-secret-token',
+          messages: [
+            {
+              role: 'user',
+              content: 'Email me at alice@example.com',
+            },
+          ],
+        },
+      });
+      tracer.endSpan(span1);
+
+      const span2 = tracer.startSpan('second-root', {
+        sessionId: 'alice@example.com',
+      });
+      tracer.endSpan(span2);
+
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(2);
+      expect(mockWriter.spans[0].session_id).toContain('[REDACTED_EMAIL_');
+      expect(mockWriter.spans[0].session_id).toBe(
+        mockWriter.spans[1].session_id
+      );
+      expect(mockWriter.spans[0].session_name).toContain('[REDACTED_EMAIL]');
+      expect(mockWriter.spans[0].tags.customer_email).toBe('[REDACTED_EMAIL]');
+      expect(mockWriter.spans[0].attributes.authorization).toBe(
+        '[REDACTED_SECRET]'
+      );
+      expect(mockWriter.spans[0].attributes.messages[0].content).toContain(
+        '[REDACTED_EMAIL]'
+      );
+    });
   });
 
   describe('error handling', () => {

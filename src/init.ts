@@ -2,6 +2,7 @@
 
 import { tracer } from './observability/Tracer';
 import { Logger, getLogger } from './observability/logger';
+import type { RedactionConfig } from './observability/redaction';
 
 const logger = getLogger('zeroeval');
 
@@ -14,6 +15,7 @@ export interface InitOptions {
   collectCodeDetails?: boolean;
   integrations?: Record<string, boolean>;
   debug?: boolean;
+  redaction?: Partial<RedactionConfig>;
 }
 
 // Track whether init has been called
@@ -56,6 +58,7 @@ export function init(opts: InitOptions = {}): void {
     collectCodeDetails,
     integrations,
     debug,
+    redaction,
   } = opts;
 
   // Check if debug mode is enabled via param or env var
@@ -100,6 +103,12 @@ export function init(opts: InitOptions = {}): void {
     maxSpans,
     collectCodeDetails,
     integrations,
+    redaction: {
+      ...redaction,
+      enabled:
+        redaction?.enabled ??
+        process.env.ZEROEVAL_REDACT_PII?.toLowerCase() === 'true',
+    },
   });
 
   // Mark as initialized

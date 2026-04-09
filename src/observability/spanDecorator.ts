@@ -39,14 +39,8 @@ export function span(
                 // capture args if inputData not provided
                 if (opts.inputData === undefined) {
                   const output =
-                    opts.outputData !== undefined
-                      ? typeof opts.outputData === 'string'
-                        ? opts.outputData
-                        : JSON.stringify(opts.outputData, replacer, 2)
-                      : typeof r === 'string'
-                        ? r
-                        : JSON.stringify(r, replacer, 2);
-                  spanInst.setIO(JSON.stringify(args, replacer, 2), output);
+                    opts.outputData !== undefined ? opts.outputData : r;
+                  spanInst.setIO(args, output);
                 } else {
                   const output =
                     opts.outputData !== undefined ? opts.outputData : r;
@@ -68,14 +62,8 @@ export function span(
           // sync path
           if (opts.inputData === undefined) {
             const output =
-              opts.outputData !== undefined
-                ? typeof opts.outputData === 'string'
-                  ? opts.outputData
-                  : JSON.stringify(opts.outputData, replacer, 2)
-                : typeof result === 'string'
-                  ? result
-                  : JSON.stringify(result, replacer, 2);
-            spanInst.setIO(JSON.stringify(args, replacer, 2), output);
+              opts.outputData !== undefined ? opts.outputData : result;
+            spanInst.setIO(args, output);
           } else {
             const output =
               opts.outputData !== undefined ? opts.outputData : result;
@@ -150,12 +138,4 @@ export function withSpan<T>(
     tracer.endSpan(spanInst);
     throw err;
   }
-}
-
-// util replacer to avoid circular
-function replacer(_key: string, value: unknown) {
-  if (typeof value === 'bigint') return value.toString();
-  if (typeof value === 'function')
-    return `[Function ${value.name || 'anonymous'}]`;
-  return value;
 }

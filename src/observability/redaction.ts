@@ -1,0 +1,798 @@
+export interface RedactionConfig {
+  enabled: boolean;
+  redactInputs?: boolean;
+  redactOutputs?: boolean;
+  redactAttributes?: boolean;
+  redactErrors?: boolean;
+  redactSessionNames?: boolean;
+  redactTagValues?: boolean;
+  sensitiveKeys?: string[];
+  customPatterns?: Array<RegExp | string>;
+}
+
+export interface ResolvedRedactionConfig {
+  enabled: boolean;
+  redactInputs: boolean;
+  redactOutputs: boolean;
+  redactAttributes: boolean;
+  redactErrors: boolean;
+  redactSessionNames: boolean;
+  redactTagValues: boolean;
+  sensitiveKeys: string[];
+  customPatterns: RegExp[];
+}
+
+export interface RedactionMetadata {
+  enabled: true;
+  count: number;
+  types: string[];
+}
+
+type RedactionResult<T> = {
+  value: T;
+  metadata?: RedactionMetadata;
+};
+
+type RedactionType = 'EMAIL' | 'PHONE' | 'SSN' | 'PAN' | 'SECRET' | 'IP';
+
+type StringRedactionOptions = {
+  stable?: boolean;
+};
+
+const EMAIL_REGEX = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const SSN_REGEX = /\b\d{3}-\d{2}-\d{4}\b/g;
+const IPV4_REGEX =
+  /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
+const IPV6_REGEX =
+  /\b(?:(?:[A-F0-9]{1,4}:){1,7}[A-F0-9]{0,4}|(?:[A-F0-9]{1,4}:){1,7}:|::(?:[A-F0-9]{1,4}:){0,6}[A-F0-9]{0,4})\b/gi;
+const JWT_REGEX = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\b/g;
+const API_KEY_REGEX =
+  /\b(?:sk|pk|rk|ghp|gho|ghu|ghs|github_pat|xox[baprs]-|AIza|ya29|AKIA|ASIA)[A-Za-z0-9._-]{8,}\b/g;
+const BEARER_REGEX = /\bBearer\s+[A-Za-z0-9\-._~+/]+=*\b/gi;
+const AUTH_HEADER_REGEX =
+  /\b(authorization|proxy-authorization)\s*[:=]\s*[^\r\n]+/gi;
+const COOKIE_HEADER_REGEX = /\b(set-cookie|cookie)\s*[:=]\s*[^\r\n]+/gi;
+const PHONE_REGEX = /(?:\+?\d[\d().\s-]{7,}\d)/g;
+const PAN_CANDIDATE_REGEX = /\b(?:\d[ -]?){13,19}\b/g;
+
+const DEFAULT_SENSITIVE_KEYS = [
+  'email',
+  'phone',
+  'mobile',
+  'telephone',
+  'ssn',
+  'social_security',
+  'national_id',
+  'tax_id',
+  'credit_card',
+  'card_number',
+  'pan',
+  'password',
+  'passwd',
+  'pwd',
+  'secret',
+  'token',
+  'api_key',
+  'apikey',
+  'access_token',
+  'refresh_token',
+  'authorization',
+  'cookie',
+  'set_cookie',
+  'session_name',
+  'client_secret',
+];
+
+const REDACTION_KEY = 'zeroeval_redaction';
+
+export function resolveRedactionConfig(
+  config?: Partial<RedactionConfig>
+): ResolvedRedactionConfig {
+  const enabled = config?.enabled ?? false;
+
+  return {
+    enabled,
+    redactInputs: enabled && (config?.redactInputs ?? true),
+    redactOutputs: enabled && (config?.redactOutputs ?? true),
+    redactAttributes: enabled && (config?.redactAttributes ?? true),
+    redactErrors: enabled && (config?.redactErrors ?? true),
+    redactSessionNames: enabled && (config?.redactSessionNames ?? true),
+    redactTagValues: enabled && (config?.redactTagValues ?? true),
+    sensitiveKeys: Array.from(
+      new Set(
+        [...DEFAULT_SENSITIVE_KEYS, ...(config?.sensitiveKeys ?? [])].map(
+          normalizeKey
+        )
+      )
+    ),
+    customPatterns: (config?.customPatterns ?? [])
+      .map(normalizeCustomPattern)
+      .filter((pattern): pattern is RegExp => pattern instanceof RegExp),
+  };
+}
+
+export function redactInputValue(
+  value: unknown,
+  config: ResolvedRedactionConfig
+): RedactionResult<unknown> {
+  if (!config.enabled || !config.redactInputs) {
+    return { value };
+  }
+
+  return redactValue(value, config);
+}
+
+export function redactOutputValue(
+  value: unknown,
+  config: ResolvedRedactionConfig
+): RedactionResult<unknown> {
+  if (!config.enabled || !config.redactOutputs) {
+    return { value };
+  }
+
+  return redactValue(value, config);
+}
+
+export function redactAttributes(
+  value: Record<string, unknown> | undefined,
+  config: ResolvedRedactionConfig
+): RedactionResult<Record<string, unknown> | undefined> {
+  if (!value || !config.enabled || !config.redactAttributes) {
+    return { value };
+  }
+
+  return redactObject(value, config);
+}
+
+export function redactTags(
+  value: Record<string, string> | undefined,
+  config: ResolvedRedactionConfig
+): RedactionResult<Record<string, string> | undefined> {
+  if (!value || !config.enabled || !config.redactTagValues) {
+    return { value };
+  }
+
+  let nextValue: Record<string, string> | undefined;
+  let metadata: RedactionMetadata | undefined;
+
+  for (const [key, rawValue] of Object.entries(value)) {
+    const redactedValue = isSensitiveKey(key, config)
+      ? createPlaceholderForValue(rawValue)
+      : redactString(rawValue, config).value;
+
+    if (!nextValue && redactedValue !== rawValue) {
+      nextValue = { ...value };
+    }
+
+    if (nextValue) {
+      nextValue[key] = redactedValue;
+    }
+
+    if (redactedValue !== rawValue) {
+      const type = detectRedactionType(rawValue);
+      metadata = mergeMetadata(metadata, {
+        enabled: true,
+        count: 1,
+        types: [type],
+      });
+    }
+  }
+
+  return { value: nextValue ?? value, metadata };
+}
+
+export function redactSessionName(
+  value: string | undefined,
+  config: ResolvedRedactionConfig
+): RedactionResult<string | undefined> {
+  if (!value || !config.enabled || !config.redactSessionNames) {
+    return { value };
+  }
+
+  return redactString(value, config);
+}
+
+export function redactSessionIdentifier(
+  value: string | undefined,
+  config: ResolvedRedactionConfig
+): RedactionResult<string | undefined> {
+  if (!value || !config.enabled) {
+    return { value };
+  }
+
+  const type = detectExactMatchType(value, config);
+  if (!type) {
+    return { value };
+  }
+
+  return {
+    value: createPlaceholder(type, value, true),
+    metadata: {
+      enabled: true,
+      count: 1,
+      types: [type],
+    },
+  };
+}
+
+export function redactErrorInfo(
+  error: { code?: string; message?: string; stack?: string } | undefined,
+  config: ResolvedRedactionConfig
+): RedactionResult<
+  { code?: string; message?: string; stack?: string } | undefined
+> {
+  if (!error || !config.enabled || !config.redactErrors) {
+    return { value: error };
+  }
+
+  const message: RedactionResult<string | undefined> = error.message
+    ? redactString(error.message, config)
+    : { value: error.message };
+  const stack: RedactionResult<string | undefined> = error.stack
+    ? redactString(error.stack, config)
+    : { value: error.stack };
+
+  const metadata = mergeMetadata(message.metadata, stack.metadata);
+  if (!metadata) {
+    return { value: error };
+  }
+
+  return {
+    value: {
+      ...error,
+      message: message.value,
+      stack: stack.value,
+    },
+    metadata,
+  };
+}
+
+export function attachRedactionMetadata(
+  attributes: Record<string, unknown>,
+  metadata?: RedactionMetadata
+): void {
+  if (!metadata) {
+    return;
+  }
+
+  const existing = parseExistingMetadata(attributes[REDACTION_KEY]);
+  attributes[REDACTION_KEY] = existing
+    ? {
+        enabled: true,
+        count: existing.count + metadata.count,
+        types: Array.from(new Set([...existing.types, ...metadata.types])),
+      }
+    : metadata;
+}
+
+export function safeSerialize(value: unknown): string {
+  const seen = new WeakSet<object>();
+
+  return JSON.stringify(value, (_key, currentValue) => {
+    if (typeof currentValue === 'bigint') {
+      return currentValue.toString();
+    }
+
+    if (typeof currentValue === 'function') {
+      return `[Function ${currentValue.name || 'anonymous'}]`;
+    }
+
+    if (
+      typeof currentValue === 'object' &&
+      currentValue !== null &&
+      !(currentValue instanceof Date)
+    ) {
+      if (seen.has(currentValue)) {
+        return '[Circular]';
+      }
+      seen.add(currentValue);
+    }
+
+    return currentValue;
+  });
+}
+
+function redactValue(
+  value: unknown,
+  config: ResolvedRedactionConfig
+): RedactionResult<unknown> {
+  if (typeof value === 'string') {
+    if (looksLikeJson(value)) {
+      const parsed = tryParseJson(value);
+      if (parsed !== undefined) {
+        return redactValue(parsed, config);
+      }
+    }
+
+    return redactString(value, config);
+  }
+
+  if (Array.isArray(value)) {
+    return redactArray(value, config);
+  }
+
+  if (value && typeof value === 'object') {
+    return redactObject(value as Record<string, unknown>, config);
+  }
+
+  return { value };
+}
+
+function redactArray(
+  value: unknown[],
+  config: ResolvedRedactionConfig
+): RedactionResult<unknown[]> {
+  let nextValue: unknown[] | undefined;
+  let metadata: RedactionMetadata | undefined;
+
+  value.forEach((item, index) => {
+    const redacted = redactValue(item, config);
+    if (!nextValue && redacted.value !== item) {
+      nextValue = [...value];
+    }
+
+    if (nextValue) {
+      nextValue[index] = redacted.value;
+    }
+
+    metadata = mergeMetadata(metadata, redacted.metadata);
+  });
+
+  return { value: nextValue ?? value, metadata };
+}
+
+function redactObject(
+  value: Record<string, unknown>,
+  config: ResolvedRedactionConfig
+): RedactionResult<Record<string, unknown>> {
+  let nextValue: Record<string, unknown> | undefined;
+  let metadata: RedactionMetadata | undefined;
+
+  for (const [key, rawValue] of Object.entries(value)) {
+    let redacted: RedactionResult<unknown>;
+
+    if (isSensitiveKey(key, config)) {
+      const type = detectRedactionType(rawValue);
+      redacted = {
+        value: createPlaceholder(type, String(rawValue ?? '')),
+        metadata: {
+          enabled: true,
+          count: 1,
+          types: [type],
+        },
+      };
+    } else {
+      redacted = redactValue(rawValue, config);
+    }
+
+    if (!nextValue && redacted.value !== rawValue) {
+      nextValue = { ...value };
+    }
+
+    if (nextValue) {
+      nextValue[key] = redacted.value;
+    }
+
+    metadata = mergeMetadata(metadata, redacted.metadata);
+  }
+
+  return { value: nextValue ?? value, metadata };
+}
+
+function redactString(
+  value: string,
+  config: ResolvedRedactionConfig,
+  options: StringRedactionOptions = {}
+): RedactionResult<string> {
+  let nextValue = value;
+  let metadata: RedactionMetadata | undefined;
+
+  const exactType = options.stable ? detectExactMatchType(value, config) : null;
+  if (exactType) {
+    return {
+      value: createPlaceholder(exactType, value, true),
+      metadata: {
+        enabled: true,
+        count: 1,
+        types: [exactType],
+      },
+    };
+  }
+
+  nextValue = replaceWithMetadata(
+    nextValue,
+    AUTH_HEADER_REGEX,
+    'SECRET',
+    (_match, headerName) => `${headerName}: [REDACTED_SECRET]`,
+    (metadataRef) => {
+      metadata = mergeMetadata(metadata, metadataRef);
+    }
+  );
+  nextValue = replaceWithMetadata(
+    nextValue,
+    COOKIE_HEADER_REGEX,
+    'SECRET',
+    (_match, headerName) => `${headerName}: [REDACTED_SECRET]`,
+    (metadataRef) => {
+      metadata = mergeMetadata(metadata, metadataRef);
+    }
+  );
+  nextValue = replaceWithMetadata(
+    nextValue,
+    BEARER_REGEX,
+    'SECRET',
+    () => 'Bearer [REDACTED_SECRET]',
+    (metadataRef) => {
+      metadata = mergeMetadata(metadata, metadataRef);
+    }
+  );
+  nextValue = replaceWithMetadata(
+    nextValue,
+    JWT_REGEX,
+    'SECRET',
+    () => '[REDACTED_SECRET]',
+    (metadataRef) => {
+      metadata = mergeMetadata(metadata, metadataRef);
+    }
+  );
+  nextValue = replaceWithMetadata(
+    nextValue,
+    API_KEY_REGEX,
+    'SECRET',
+    () => '[REDACTED_SECRET]',
+    (metadataRef) => {
+      metadata = mergeMetadata(metadata, metadataRef);
+    }
+  );
+  nextValue = replacePanCandidates(nextValue, (metadataRef) => {
+    metadata = mergeMetadata(metadata, metadataRef);
+  });
+  nextValue = replaceWithMetadata(
+    nextValue,
+    SSN_REGEX,
+    'SSN',
+    () => '[REDACTED_SSN]',
+    (metadataRef) => {
+      metadata = mergeMetadata(metadata, metadataRef);
+    }
+  );
+  nextValue = replaceWithMetadata(
+    nextValue,
+    EMAIL_REGEX,
+    'EMAIL',
+    () => '[REDACTED_EMAIL]',
+    (metadataRef) => {
+      metadata = mergeMetadata(metadata, metadataRef);
+    }
+  );
+  nextValue = replaceWithMetadata(
+    nextValue,
+    PHONE_REGEX,
+    'PHONE',
+    () => '[REDACTED_PHONE]',
+    (metadataRef) => {
+      metadata = mergeMetadata(metadata, metadataRef);
+    }
+  );
+  nextValue = replaceWithMetadata(
+    nextValue,
+    IPV4_REGEX,
+    'IP',
+    () => '[REDACTED_IP]',
+    (metadataRef) => {
+      metadata = mergeMetadata(metadata, metadataRef);
+    }
+  );
+  nextValue = replaceWithMetadata(
+    nextValue,
+    IPV6_REGEX,
+    'IP',
+    () => '[REDACTED_IP]',
+    (metadataRef) => {
+      metadata = mergeMetadata(metadata, metadataRef);
+    }
+  );
+
+  for (const pattern of config.customPatterns) {
+    nextValue = replaceWithMetadata(
+      nextValue,
+      pattern,
+      'SECRET',
+      () => '[REDACTED_SECRET]',
+      (metadataRef) => {
+        metadata = mergeMetadata(metadata, metadataRef);
+      }
+    );
+  }
+
+  return {
+    value: nextValue,
+    metadata,
+  };
+}
+
+function replacePanCandidates(
+  value: string,
+  onMatch: (metadata: RedactionMetadata) => void
+): string {
+  PAN_CANDIDATE_REGEX.lastIndex = 0;
+  return value.replace(PAN_CANDIDATE_REGEX, (matched) => {
+    const digits = matched.replace(/[ -]/g, '');
+    if (!isLikelyPan(digits)) {
+      return matched;
+    }
+
+    onMatch({
+      enabled: true,
+      count: 1,
+      types: ['PAN'],
+    });
+    return '[REDACTED_PAN]';
+  });
+}
+
+function replaceWithMetadata(
+  value: string,
+  pattern: RegExp,
+  type: RedactionType,
+  replacement: (...args: string[]) => string,
+  onMatch: (metadata: RedactionMetadata) => void
+): string {
+  pattern.lastIndex = 0;
+  let matched = false;
+  const result = value.replace(pattern, (...args) => {
+    matched = true;
+    return replacement(...(args as string[]));
+  });
+  pattern.lastIndex = 0;
+
+  if (matched) {
+    onMatch({
+      enabled: true,
+      count: 1,
+      types: [type],
+    });
+  }
+
+  return result;
+}
+
+function createPlaceholderForValue(value: unknown): string {
+  return createPlaceholder(detectRedactionType(value), String(value ?? ''));
+}
+
+function createPlaceholder(
+  type: RedactionType,
+  rawValue: string,
+  stable = false
+): string {
+  const base = `[REDACTED_${type}]`;
+  if (!stable) {
+    return base;
+  }
+
+  return `[REDACTED_${type}_${stableHash(rawValue)}]`;
+}
+
+function detectRedactionType(value: unknown): RedactionType {
+  if (typeof value !== 'string') {
+    return 'SECRET';
+  }
+
+  return detectExactMatchType(value, resolveRedactionConfig({ enabled: true }))
+    ? (detectExactMatchType(
+        value,
+        resolveRedactionConfig({ enabled: true })
+      ) as RedactionType)
+    : value.includes('@')
+      ? 'EMAIL'
+      : 'SECRET';
+}
+
+function detectExactMatchType(
+  value: string,
+  config: ResolvedRedactionConfig
+): RedactionType | null {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (EMAIL_REGEX.test(trimmed) && EMAIL_REGEX.lastIndex === trimmed.length) {
+    EMAIL_REGEX.lastIndex = 0;
+    return 'EMAIL';
+  }
+  EMAIL_REGEX.lastIndex = 0;
+
+  if (SSN_REGEX.test(trimmed) && SSN_REGEX.lastIndex === trimmed.length) {
+    SSN_REGEX.lastIndex = 0;
+    return 'SSN';
+  }
+  SSN_REGEX.lastIndex = 0;
+
+  if (
+    BEARER_REGEX.test(trimmed) ||
+    JWT_REGEX.test(trimmed) ||
+    API_KEY_REGEX.test(trimmed) ||
+    AUTH_HEADER_REGEX.test(trimmed) ||
+    COOKIE_HEADER_REGEX.test(trimmed)
+  ) {
+    resetGlobalRegexes();
+    return 'SECRET';
+  }
+  resetGlobalRegexes();
+
+  if (IPV4_REGEX.test(trimmed) && IPV4_REGEX.lastIndex === trimmed.length) {
+    IPV4_REGEX.lastIndex = 0;
+    return 'IP';
+  }
+  IPV4_REGEX.lastIndex = 0;
+
+  if (IPV6_REGEX.test(trimmed) && IPV6_REGEX.lastIndex === trimmed.length) {
+    IPV6_REGEX.lastIndex = 0;
+    return 'IP';
+  }
+  IPV6_REGEX.lastIndex = 0;
+
+  const phoneCandidate = trimmed.replace(/[\s().-]/g, '');
+  if (
+    PHONE_REGEX.test(trimmed) &&
+    PHONE_REGEX.lastIndex === trimmed.length &&
+    phoneCandidate.length >= 8 &&
+    phoneCandidate.length <= 15
+  ) {
+    PHONE_REGEX.lastIndex = 0;
+    return 'PHONE';
+  }
+  PHONE_REGEX.lastIndex = 0;
+
+  const panDigits = trimmed.replace(/[ -]/g, '');
+  if (isLikelyPan(panDigits)) {
+    return 'PAN';
+  }
+
+  for (const pattern of config.customPatterns) {
+    if (pattern.test(trimmed)) {
+      pattern.lastIndex = 0;
+      return 'SECRET';
+    }
+    pattern.lastIndex = 0;
+  }
+
+  return null;
+}
+
+function isSensitiveKey(key: string, config: ResolvedRedactionConfig): boolean {
+  const normalized = normalizeKey(key);
+  return config.sensitiveKeys.some(
+    (sensitiveKey) =>
+      normalized === sensitiveKey ||
+      normalized.endsWith(`_${sensitiveKey}`) ||
+      normalized.endsWith(`.${sensitiveKey}`)
+  );
+}
+
+function normalizeCustomPattern(pattern: RegExp | string): RegExp | undefined {
+  if (pattern instanceof RegExp) {
+    const flags = pattern.flags.includes('g')
+      ? pattern.flags
+      : `${pattern.flags}g`;
+    return new RegExp(pattern.source, flags);
+  }
+
+  const inlineMatch = pattern.match(/^\/(.+)\/([dgimsuvy]*)$/);
+  if (inlineMatch) {
+    const flags = inlineMatch[2].includes('g')
+      ? inlineMatch[2]
+      : `${inlineMatch[2]}g`;
+    return new RegExp(inlineMatch[1], flags);
+  }
+
+  return new RegExp(escapeRegExp(pattern), 'g');
+}
+
+function mergeMetadata(
+  left?: RedactionMetadata,
+  right?: RedactionMetadata
+): RedactionMetadata | undefined {
+  if (!left) {
+    return right;
+  }
+  if (!right) {
+    return left;
+  }
+
+  return {
+    enabled: true,
+    count: left.count + right.count,
+    types: Array.from(new Set([...left.types, ...right.types])),
+  };
+}
+
+function parseExistingMetadata(value: unknown): RedactionMetadata | undefined {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !('enabled' in value) ||
+    !('count' in value) ||
+    !('types' in value)
+  ) {
+    return undefined;
+  }
+
+  const candidate = value as RedactionMetadata;
+  if (
+    candidate.enabled !== true ||
+    typeof candidate.count !== 'number' ||
+    !Array.isArray(candidate.types)
+  ) {
+    return undefined;
+  }
+
+  return candidate;
+}
+
+function tryParseJson(value: string): unknown | undefined {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function looksLikeJson(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.startsWith('{') || trimmed.startsWith('[');
+}
+
+function normalizeKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+}
+
+function resetGlobalRegexes(): void {
+  BEARER_REGEX.lastIndex = 0;
+  JWT_REGEX.lastIndex = 0;
+  API_KEY_REGEX.lastIndex = 0;
+  AUTH_HEADER_REGEX.lastIndex = 0;
+  COOKIE_HEADER_REGEX.lastIndex = 0;
+}
+
+function isLikelyPan(value: string): boolean {
+  if (!/^\d{13,19}$/.test(value)) {
+    return false;
+  }
+
+  let sum = 0;
+  let shouldDouble = false;
+
+  for (let index = value.length - 1; index >= 0; index -= 1) {
+    let digit = Number(value[index]);
+    if (shouldDouble) {
+      digit *= 2;
+      if (digit > 9) {
+        digit -= 9;
+      }
+    }
+    sum += digit;
+    shouldDouble = !shouldDouble;
+  }
+
+  return sum % 10 === 0;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stableHash(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16);
+}

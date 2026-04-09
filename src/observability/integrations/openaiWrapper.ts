@@ -302,7 +302,7 @@ function wrapCompletionsCreate(originalMethod: Function): Function {
             : 0;
         span.attributes.throughput = throughput;
 
-        span.setIO(JSON.stringify(serializedMessages), output);
+        span.setIO(serializedMessages, output);
       }
 
       tracer.endSpan(span);
@@ -357,10 +357,10 @@ function wrapGenericMethod(
       } else if (result?.embedding) {
         output = `embedding[${result.embedding.length}]`;
       } else {
-        output = JSON.stringify(result);
+        output = result;
       }
 
-      span.setIO(JSON.stringify(params), output);
+      span.setIO(params, output);
       tracer.endSpan(span);
       return result;
     } catch (error: any) {
@@ -424,7 +424,7 @@ async function* wrapStream(
         : 0;
     span.attributes.throughput = throughput;
 
-    span.setIO(JSON.stringify(serializedMessages), fullResponse);
+    span.setIO(serializedMessages, fullResponse);
   } catch (error: any) {
     errorOccurred = true;
     span.setError({
