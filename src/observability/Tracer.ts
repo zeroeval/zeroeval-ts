@@ -12,6 +12,7 @@ import { getLogger, Logger } from './logger';
 import {
   attachRedactionMetadata,
   createRedactionReferenceContext,
+  mergeMetadata,
   redactAttributes,
   redactSessionIdentifier,
   redactSessionName,
@@ -31,27 +32,6 @@ if (process.env.ZEROEVAL_DEBUG?.toLowerCase() === 'true') {
 }
 
 const logger = getLogger('zeroeval.tracer');
-
-function mergeRedactionMetadata(
-  existing?: RedactionMetadata,
-  next?: RedactionMetadata
-): RedactionMetadata | undefined {
-  if (!next) {
-    return existing;
-  }
-  if (!existing) {
-    return {
-      enabled: true,
-      count: next.count,
-      types: [...next.types],
-    };
-  }
-  return {
-    enabled: true,
-    count: existing.count + next.count,
-    types: Array.from(new Set([...existing.types, ...next.types])),
-  };
-}
 
 interface ConfigureOptions {
   flushInterval?: number;
@@ -355,7 +335,7 @@ export class Tracer {
       ...(this._traceTags[traceId] ?? {}),
       ...(redactedTags.value ?? {}),
     };
-    this._traceTagMetadata[traceId] = mergeRedactionMetadata(
+    this._traceTagMetadata[traceId] = mergeMetadata(
       this._traceTagMetadata[traceId],
       redactedTags.metadata
     );
@@ -452,7 +432,7 @@ export class Tracer {
         ...(this._sessionTags[sessionTagKey] ?? {}),
         ...(redactedTags.value ?? {}),
       };
-      this._sessionTagMetadata[sessionTagKey] = mergeRedactionMetadata(
+      this._sessionTagMetadata[sessionTagKey] = mergeMetadata(
         this._sessionTagMetadata[sessionTagKey],
         redactedTags.metadata
       );

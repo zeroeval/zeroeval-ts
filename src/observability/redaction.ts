@@ -11,6 +11,7 @@ export interface RedactionConfig {
 }
 
 export interface ResolvedRedactionConfig {
+  _resolved: true;
   enabled: boolean;
   redactInputs: boolean;
   redactOutputs: boolean;
@@ -101,18 +102,7 @@ const REDACTION_KEY = 'zeroeval_redaction';
 function isResolvedRedactionConfig(
   config?: Partial<RedactionConfig> | ResolvedRedactionConfig
 ): config is ResolvedRedactionConfig {
-  return (
-    !!config &&
-    typeof config.enabled === 'boolean' &&
-    typeof config.redactInputs === 'boolean' &&
-    typeof config.redactOutputs === 'boolean' &&
-    typeof config.redactAttributes === 'boolean' &&
-    typeof config.redactErrors === 'boolean' &&
-    typeof config.redactSessionNames === 'boolean' &&
-    typeof config.redactTagValues === 'boolean' &&
-    Array.isArray(config.sensitiveKeys) &&
-    Array.isArray(config.customPatterns)
-  );
+  return !!config && '_resolved' in config && config._resolved === true;
 }
 
 export function resolveRedactionConfig(
@@ -125,6 +115,7 @@ export function resolveRedactionConfig(
   const enabled = config?.enabled ?? false;
 
   return {
+    _resolved: true,
     enabled,
     redactInputs: enabled && (config?.redactInputs ?? true),
     redactOutputs: enabled && (config?.redactOutputs ?? true),
@@ -977,7 +968,7 @@ function normalizeCustomPattern(pattern: RegExp | string): RegExp | undefined {
   return new RegExp(escapeRegExp(pattern), 'g');
 }
 
-function mergeMetadata(
+export function mergeMetadata(
   left?: RedactionMetadata,
   right?: RedactionMetadata
 ): RedactionMetadata | undefined {
@@ -1034,6 +1025,8 @@ function looksLikeJson(value: string): boolean {
 function normalizeKey(value: string): string {
   return value
     .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
     .toLowerCase()
     .replace(/[\s-]+/g, '_');
 }
