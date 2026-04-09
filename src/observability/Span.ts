@@ -2,13 +2,18 @@ import { randomUUID } from 'crypto';
 import type { Signal } from './signals';
 import {
   attachRedactionMetadata,
+  createRedactionReferenceContext,
   redactErrorInfo,
   redactInputValue,
   redactOutputValue,
   resolveRedactionConfig,
   safeSerialize,
 } from './redaction';
-import type { RedactionConfig, ResolvedRedactionConfig } from './redaction';
+import type {
+  RedactionConfig,
+  RedactionReferenceContext,
+  ResolvedRedactionConfig,
+} from './redaction';
 
 export interface ErrorInfo {
   code?: string;
@@ -41,15 +46,22 @@ export class Span {
   error?: ErrorInfo;
   status: 'ok' | 'error' = 'ok';
   private readonly redactionConfig: ResolvedRedactionConfig;
+  private readonly redactionReferenceContext?: RedactionReferenceContext;
 
   constructor(
     name: string,
     traceId?: string,
-    redactionConfig?: Partial<RedactionConfig>
+    redactionConfig?: Partial<RedactionConfig>,
+    redactionReferenceContext?: RedactionReferenceContext
   ) {
     this.name = name;
     this.traceId = traceId ?? randomUUID();
     this.redactionConfig = resolveRedactionConfig(redactionConfig);
+    this.redactionReferenceContext =
+      redactionReferenceContext ??
+      (this.redactionConfig.enabled
+        ? createRedactionReferenceContext()
+        : undefined);
   }
 
   end(): void {
@@ -61,7 +73,11 @@ export class Span {
   }
 
   setError(info: ErrorInfo): void {
-    const redacted = redactErrorInfo(info, this.redactionConfig);
+    const redacted = redactErrorInfo(
+      info,
+      this.redactionConfig,
+      this.redactionReferenceContext
+    );
     this.error = redacted.value;
     attachRedactionMetadata(this.attributes, redacted.metadata);
     this.status = 'error';
@@ -69,7 +85,11 @@ export class Span {
 
   setIO(input?: unknown, output?: unknown): void {
     if (input !== undefined) {
-      const redacted = redactInputValue(input, this.redactionConfig);
+      const redacted = redactInputValue(
+        input,
+        this.redactionConfig,
+        this.redactionReferenceContext
+      );
       this.inputData =
         typeof redacted.value === 'string'
           ? redacted.value
@@ -77,7 +97,11 @@ export class Span {
       attachRedactionMetadata(this.attributes, redacted.metadata);
     }
     if (output !== undefined) {
-      const redacted = redactOutputValue(output, this.redactionConfig);
+      const redacted = redactOutputValue(
+        output,
+        this.redactionConfig,
+        this.redactionReferenceContext
+      );
       this.outputData =
         typeof redacted.value === 'string'
           ? redacted.value
@@ -115,6 +139,10 @@ export class Span {
       value,
       type: signalType,
     };
+  }
+
+  getRedactionReferenceContext(): RedactionReferenceContext | undefined {
+    return this.redactionReferenceContext;
   }
 
   toJSON(): Record<string, unknown> {

@@ -28,6 +28,11 @@ export interface RedactionMetadata {
   types: string[];
 }
 
+export interface RedactionReferenceContext {
+  placeholders: Partial<Record<RedactionType, Map<string, string>>>;
+  counters: Partial<Record<RedactionType, number>>;
+}
+
 type RedactionResult<T> = {
   value: T;
   metadata?: RedactionMetadata;
@@ -35,6 +40,7 @@ type RedactionResult<T> = {
 
 type RedactionTraversalContext = {
   visiting: WeakSet<object>;
+  referenceContext?: RedactionReferenceContext;
 };
 
 type RedactionType = 'EMAIL' | 'PHONE' | 'SSN' | 'PAN' | 'SECRET' | 'IP';
@@ -58,6 +64,7 @@ const AUTH_HEADER_REGEX =
 const COOKIE_HEADER_REGEX = /\b(set-cookie|cookie)\s*[:=]\s*[^\r\n]+/gi;
 const PHONE_REGEX = /(?:\+?\d[\d().\s-]{7,}\d)/g;
 const PAN_CANDIDATE_REGEX = /\b(?:\d[ -]?){13,19}\b/g;
+const EXACT_PLACEHOLDER_REGEX = /^\[REDACTED_[A-Z]+(?:_[A-Z0-9]+)?\]$/;
 
 const DEFAULT_SENSITIVE_KEYS = [
   'email',
@@ -115,39 +122,50 @@ export function resolveRedactionConfig(
   };
 }
 
+export function createRedactionReferenceContext(): RedactionReferenceContext {
+  return {
+    placeholders: {},
+    counters: {},
+  };
+}
+
 export function redactInputValue(
   value: unknown,
-  config: ResolvedRedactionConfig
+  config: ResolvedRedactionConfig,
+  referenceContext?: RedactionReferenceContext
 ): RedactionResult<unknown> {
   if (!config.enabled || !config.redactInputs) {
     return { value };
   }
-  return redactValue(value, config, createTraversalContext());
+  return redactValue(value, config, createTraversalContext(referenceContext));
 }
 
 export function redactOutputValue(
   value: unknown,
-  config: ResolvedRedactionConfig
+  config: ResolvedRedactionConfig,
+  referenceContext?: RedactionReferenceContext
 ): RedactionResult<unknown> {
   if (!config.enabled || !config.redactOutputs) {
     return { value };
   }
-  return redactValue(value, config, createTraversalContext());
+  return redactValue(value, config, createTraversalContext(referenceContext));
 }
 
 export function redactAttributes(
   value: Record<string, unknown> | undefined,
-  config: ResolvedRedactionConfig
+  config: ResolvedRedactionConfig,
+  referenceContext?: RedactionReferenceContext
 ): RedactionResult<Record<string, unknown> | undefined> {
   if (!value || !config.enabled || !config.redactAttributes) {
     return { value };
   }
-  return redactObject(value, config, createTraversalContext());
+  return redactObject(value, config, createTraversalContext(referenceContext));
 }
 
 export function redactTags(
   value: Record<string, string> | undefined,
-  config: ResolvedRedactionConfig
+  config: ResolvedRedactionConfig,
+  referenceContext?: RedactionReferenceContext
 ): RedactionResult<Record<string, string> | undefined> {
   if (!value || !config.enabled || !config.redactTagValues) {
     return { value };
@@ -158,8 +176,12 @@ export function redactTags(
 
   for (const [key, rawValue] of Object.entries(value)) {
     const redactedValue = isSensitiveKey(key, config)
-      ? createPlaceholderForValue(rawValue)
-      : redactString(rawValue, config).value;
+      ? redactSensitiveValueByType(
+          detectRedactionType(rawValue),
+          rawValue,
+          referenceContext
+        )
+      : redactString(rawValue, config, {}, referenceContext).value;
 
     if (!nextValue && redactedValue !== rawValue) {
       nextValue = { ...value };
@@ -184,20 +206,26 @@ export function redactTags(
 
 export function redactSessionName(
   value: string | undefined,
-  config: ResolvedRedactionConfig
+  config: ResolvedRedactionConfig,
+  referenceContext?: RedactionReferenceContext
 ): RedactionResult<string | undefined> {
   if (!value || !config.enabled || !config.redactSessionNames) {
     return { value };
   }
 
-  return redactString(value, config);
+  return redactString(value, config, {}, referenceContext);
 }
 
 export function redactSessionIdentifier(
   value: string | undefined,
-  config: ResolvedRedactionConfig
+  config: ResolvedRedactionConfig,
+  referenceContext?: RedactionReferenceContext
 ): RedactionResult<string | undefined> {
   if (!value || !config.enabled) {
+    return { value };
+  }
+
+  if (isExactPlaceholder(value)) {
     return { value };
   }
 
@@ -207,7 +235,7 @@ export function redactSessionIdentifier(
   }
 
   return {
-    value: createPlaceholder(type, value, true),
+    value: redactSensitiveValueByType(type, value, referenceContext),
     metadata: {
       enabled: true,
       count: 1,
@@ -218,7 +246,8 @@ export function redactSessionIdentifier(
 
 export function redactErrorInfo(
   error: { code?: string; message?: string; stack?: string } | undefined,
-  config: ResolvedRedactionConfig
+  config: ResolvedRedactionConfig,
+  referenceContext?: RedactionReferenceContext
 ): RedactionResult<
   { code?: string; message?: string; stack?: string } | undefined
 > {
@@ -227,10 +256,10 @@ export function redactErrorInfo(
   }
 
   const message: RedactionResult<string | undefined> = error.message
-    ? redactString(error.message, config)
+    ? redactString(error.message, config, {}, referenceContext)
     : { value: error.message };
   const stack: RedactionResult<string | undefined> = error.stack
-    ? redactString(error.stack, config)
+    ? redactString(error.stack, config, {}, referenceContext)
     : { value: error.stack };
 
   const metadata = mergeMetadata(message.metadata, stack.metadata);
@@ -306,7 +335,7 @@ function redactValue(
       }
     }
 
-    return redactString(value, config);
+    return redactString(value, config, {}, context.referenceContext);
   }
 
   if (Array.isArray(value)) {
@@ -375,7 +404,11 @@ function redactObject(
       if (isSensitiveKey(key, config)) {
         const type = detectRedactionType(rawValue);
         redacted = {
-          value: createPlaceholder(type, String(rawValue ?? '')),
+          value: redactSensitiveValueByType(
+            type,
+            rawValue,
+            context.referenceContext
+          ),
           metadata: {
             enabled: true,
             count: 1,
@@ -403,24 +436,32 @@ function redactObject(
   return { value: nextValue ?? value, metadata };
 }
 
-function createTraversalContext(): RedactionTraversalContext {
+function createTraversalContext(
+  referenceContext?: RedactionReferenceContext
+): RedactionTraversalContext {
   return {
     visiting: new WeakSet<object>(),
+    referenceContext,
   };
 }
 
 function redactString(
   value: string,
   config: ResolvedRedactionConfig,
-  options: StringRedactionOptions = {}
+  options: StringRedactionOptions = {},
+  referenceContext?: RedactionReferenceContext
 ): RedactionResult<string> {
+  if (isExactPlaceholder(value)) {
+    return { value };
+  }
+
   let nextValue = value;
   let metadata: RedactionMetadata | undefined;
 
   const exactType = options.stable ? detectExactMatchType(value, config) : null;
   if (exactType) {
     return {
-      value: createPlaceholder(exactType, value, true),
+      value: redactSensitiveValueByType(exactType, value, referenceContext),
       metadata: {
         enabled: true,
         count: 1,
@@ -433,94 +474,123 @@ function redactString(
     nextValue,
     AUTH_HEADER_REGEX,
     'SECRET',
-    (_match, headerName) => `${headerName}: [REDACTED_SECRET]`,
+    (_match, headerName, headerValue) =>
+      `${headerName}: ${redactSensitiveValueByType(
+        'SECRET',
+        headerValue,
+        referenceContext
+      )}`,
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    }
+    },
+    referenceContext
   );
   nextValue = replaceWithMetadata(
     nextValue,
     COOKIE_HEADER_REGEX,
     'SECRET',
-    (_match, headerName) => `${headerName}: [REDACTED_SECRET]`,
+    (_match, headerName, headerValue) =>
+      `${headerName}: ${redactSensitiveValueByType(
+        'SECRET',
+        headerValue,
+        referenceContext
+      )}`,
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    }
+    },
+    referenceContext
   );
   nextValue = replaceWithMetadata(
     nextValue,
     BEARER_REGEX,
     'SECRET',
-    () => 'Bearer [REDACTED_SECRET]',
+    (match) =>
+      `Bearer ${redactSensitiveValueByType(
+        'SECRET',
+        match.replace(/^Bearer\s+/i, ''),
+        referenceContext
+      )}`,
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    }
+    },
+    referenceContext
   );
   nextValue = replaceWithMetadata(
     nextValue,
     JWT_REGEX,
     'SECRET',
-    () => '[REDACTED_SECRET]',
+    (match) => redactSensitiveValueByType('SECRET', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    }
+    },
+    referenceContext
   );
   nextValue = replaceWithMetadata(
     nextValue,
     API_KEY_REGEX,
     'SECRET',
-    () => '[REDACTED_SECRET]',
+    (match) => redactSensitiveValueByType('SECRET', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    }
+    },
+    referenceContext
   );
-  nextValue = replacePanCandidates(nextValue, (metadataRef) => {
-    metadata = mergeMetadata(metadata, metadataRef);
-  });
+  nextValue = replacePanCandidates(
+    nextValue,
+    (metadataRef) => {
+      metadata = mergeMetadata(metadata, metadataRef);
+    },
+    referenceContext
+  );
   nextValue = replaceWithMetadata(
     nextValue,
     SSN_REGEX,
     'SSN',
-    () => '[REDACTED_SSN]',
+    (match) => redactSensitiveValueByType('SSN', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    }
+    },
+    referenceContext
   );
   nextValue = replaceWithMetadata(
     nextValue,
     EMAIL_REGEX,
     'EMAIL',
-    () => '[REDACTED_EMAIL]',
+    (match) => redactSensitiveValueByType('EMAIL', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    }
+    },
+    referenceContext
   );
   nextValue = replaceWithMetadata(
     nextValue,
     PHONE_REGEX,
     'PHONE',
-    () => '[REDACTED_PHONE]',
+    (match) => redactSensitiveValueByType('PHONE', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    }
+    },
+    referenceContext
   );
   nextValue = replaceWithMetadata(
     nextValue,
     IPV4_REGEX,
     'IP',
-    () => '[REDACTED_IP]',
+    (match) => redactSensitiveValueByType('IP', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    }
+    },
+    referenceContext
   );
   nextValue = replaceWithMetadata(
     nextValue,
     IPV6_REGEX,
     'IP',
-    () => '[REDACTED_IP]',
+    (match) => redactSensitiveValueByType('IP', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    }
+    },
+    referenceContext
   );
 
   for (const pattern of config.customPatterns) {
@@ -528,10 +598,11 @@ function redactString(
       nextValue,
       pattern,
       'SECRET',
-      () => '[REDACTED_SECRET]',
+      (match) => redactSensitiveValueByType('SECRET', match, referenceContext),
       (metadataRef) => {
         metadata = mergeMetadata(metadata, metadataRef);
-      }
+      },
+      referenceContext
     );
   }
 
@@ -543,7 +614,8 @@ function redactString(
 
 function replacePanCandidates(
   value: string,
-  onMatch: (metadata: RedactionMetadata) => void
+  onMatch: (metadata: RedactionMetadata) => void,
+  referenceContext?: RedactionReferenceContext
 ): string {
   PAN_CANDIDATE_REGEX.lastIndex = 0;
   return value.replace(PAN_CANDIDATE_REGEX, (matched) => {
@@ -557,7 +629,7 @@ function replacePanCandidates(
       count: 1,
       types: ['PAN'],
     });
-    return '[REDACTED_PAN]';
+    return redactSensitiveValueByType('PAN', matched, referenceContext);
   });
 }
 
@@ -566,20 +638,21 @@ function replaceWithMetadata(
   pattern: RegExp,
   type: RedactionType,
   replacement: (...args: string[]) => string,
-  onMatch: (metadata: RedactionMetadata) => void
+  onMatch: (metadata: RedactionMetadata) => void,
+  _referenceContext?: RedactionReferenceContext
 ): string {
   pattern.lastIndex = 0;
-  let matched = false;
+  let matchCount = 0;
   const result = value.replace(pattern, (...args) => {
-    matched = true;
+    matchCount += 1;
     return replacement(...(args as string[]));
   });
   pattern.lastIndex = 0;
 
-  if (matched) {
+  if (matchCount > 0) {
     onMatch({
       enabled: true,
-      count: 1,
+      count: matchCount,
       types: [type],
     });
   }
@@ -588,20 +661,11 @@ function replaceWithMetadata(
 }
 
 function createPlaceholderForValue(value: unknown): string {
-  return createPlaceholder(detectRedactionType(value), String(value ?? ''));
+  return redactSensitiveValueByType(detectRedactionType(value), value);
 }
 
-function createPlaceholder(
-  type: RedactionType,
-  rawValue: string,
-  stable = false
-): string {
-  const base = `[REDACTED_${type}]`;
-  if (!stable) {
-    return base;
-  }
-
-  return `[REDACTED_${type}_${stableHash(rawValue)}]`;
+function createPlaceholder(type: RedactionType, suffix?: string): string {
+  return suffix ? `[REDACTED_${type}_${suffix}]` : `[REDACTED_${type}]`;
 }
 
 function detectRedactionType(value: unknown): RedactionType {
@@ -722,6 +786,80 @@ function isSensitiveKey(key: string, config: ResolvedRedactionConfig): boolean {
   );
 }
 
+function redactSensitiveValueByType(
+  type: RedactionType,
+  rawValue: unknown,
+  referenceContext?: RedactionReferenceContext
+): string {
+  const rawString = String(rawValue ?? '');
+  if (isExactPlaceholder(rawString)) {
+    return rawString;
+  }
+
+  const normalized = normalizeSensitiveValue(type, rawString);
+  if (!normalized) {
+    return createPlaceholder(type);
+  }
+
+  if (!referenceContext) {
+    return createPlaceholder(type);
+  }
+
+  const mapping =
+    referenceContext.placeholders[type] ??
+    (referenceContext.placeholders[type] = new Map<string, string>());
+  const existing = mapping.get(normalized);
+  if (existing) {
+    return existing;
+  }
+
+  const nextIndex = (referenceContext.counters[type] ?? 0) + 1;
+  referenceContext.counters[type] = nextIndex;
+  const placeholder = createPlaceholder(type, toPlaceholderSuffix(nextIndex));
+  mapping.set(normalized, placeholder);
+  return placeholder;
+}
+
+function normalizeSensitiveValue(type: RedactionType, value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || isExactPlaceholder(trimmed)) {
+    return trimmed;
+  }
+
+  switch (type) {
+    case 'EMAIL':
+      return trimmed.toLowerCase();
+    case 'PHONE':
+      return trimmed.replace(/\D/g, '');
+    case 'SSN':
+      return trimmed.replace(/\D/g, '');
+    case 'PAN':
+      return trimmed.replace(/\D/g, '');
+    case 'IP':
+      return trimmed.toLowerCase();
+    case 'SECRET':
+    default:
+      return trimmed;
+  }
+}
+
+function isExactPlaceholder(value: string): boolean {
+  return EXACT_PLACEHOLDER_REGEX.test(value.trim());
+}
+
+function toPlaceholderSuffix(index: number): string {
+  let current = index;
+  let suffix = '';
+
+  while (current > 0) {
+    current -= 1;
+    suffix = String.fromCharCode(65 + (current % 26)) + suffix;
+    current = Math.floor(current / 26);
+  }
+
+  return suffix || 'A';
+}
+
 function normalizeCustomPattern(pattern: RegExp | string): RegExp | undefined {
   if (pattern instanceof RegExp) {
     const flags = pattern.flags.includes('g')
@@ -835,13 +973,4 @@ function isLikelyPan(value: string): boolean {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function stableHash(value: string): string {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(16);
 }

@@ -6,9 +6,10 @@
 //   npm run example:pii-redaction
 //
 // Expected markers in the printed payload:
-//   [REDACTED_EMAIL]
-//   [REDACTED_PHONE]
-//   [REDACTED_SECRET]
+//   [REDACTED_EMAIL_A]
+//   [REDACTED_EMAIL_B]
+//   [REDACTED_PHONE_A]
+//   [REDACTED_SECRET_A]
 
 import * as ze from 'zeroeval';
 
@@ -28,6 +29,7 @@ async function main(): Promise<void> {
     tags: {
       customer_email: 'alice@example.com',
       auth_token: 'Bearer super-secret-token',
+      backup_email: 'alice@example.com',
     },
     attributes: {
       messages: [
@@ -35,6 +37,11 @@ async function main(): Promise<void> {
           role: 'user',
           content:
             'My email is alice@example.com and my phone is +1 (415) 555-1212',
+        },
+        {
+          role: 'assistant',
+          content:
+            'Repeating alice@example.com with a second email bob@example.com',
         },
       ],
       authorization: 'Bearer top-secret-token',
@@ -47,8 +54,9 @@ async function main(): Promise<void> {
       phone: '+1 (415) 555-1212',
       password: 'hunter2',
       apiKey: 'sk-live-abcdef1234567890',
+      confirmEmail: 'alice@example.com',
     },
-    'Send follow-up to alice@example.com. Session cookie: abc123'
+    'Send follow-up to alice@example.com and bob@example.com. Session cookie: abc123'
   );
 
   span.setError({
@@ -59,6 +67,7 @@ async function main(): Promise<void> {
 
   ze.tracer.addSessionTags(sessionId, {
     support_email: 'alice@example.com',
+    escalation_email: 'bob@example.com',
   });
 
   ze.tracer.endSpan(span);

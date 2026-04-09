@@ -61,11 +61,13 @@ describe('wrapper redaction', () => {
 
     expect(mockWriter.spans).toHaveLength(1);
     const span = mockWriter.spans[0];
-    expect(span.attributes.messages[0].content).toContain('[REDACTED_EMAIL]');
-    expect(span.attributes.messages[0].content).toContain('[REDACTED_SECRET]');
+    expect(span.attributes.messages[0].content).toContain('[REDACTED_EMAIL_A]');
+    expect(span.attributes.messages[0].content).toContain(
+      '[REDACTED_SECRET_A]'
+    );
     expect(span.input_data).not.toContain('bob@example.com');
-    expect(span.output_data).toContain('[REDACTED_EMAIL]');
-    expect(span.output_data).toContain('[REDACTED_PHONE]');
+    expect(span.output_data).toContain('[REDACTED_EMAIL_A]');
+    expect(span.output_data).toContain('[REDACTED_PHONE_A]');
   });
 
   it('should redact Vercel AI wrapper prompts and outputs', async () => {
@@ -87,8 +89,8 @@ describe('wrapper redaction', () => {
 
     expect(mockWriter.spans).toHaveLength(1);
     const span = mockWriter.spans[0];
-    expect(span.input_data).toContain('[REDACTED_PHONE]');
-    expect(span.output_data).toContain('[REDACTED_SECRET]');
+    expect(span.input_data).toContain('[REDACTED_PHONE_A]');
+    expect(span.output_data).toContain('[REDACTED_SECRET_A]');
   });
 
   it('should redact LangChain callback handler inputs, outputs, and tool args', async () => {
@@ -145,10 +147,10 @@ describe('wrapper redaction', () => {
     const span = mockWriter.spans[0];
     const serializedAttributes = JSON.stringify(span.attributes);
 
-    expect(span.input_data).toContain('[REDACTED_EMAIL]');
-    expect(span.output_data).toContain('[REDACTED_PHONE]');
-    expect(serializedAttributes).toContain('[REDACTED_EMAIL]');
-    expect(serializedAttributes).toContain('[REDACTED_SECRET]');
+    expect(span.input_data).toContain('[REDACTED_EMAIL_A]');
+    expect(span.output_data).toContain('[REDACTED_PHONE_A]');
+    expect(serializedAttributes).toContain('[REDACTED_EMAIL_A]');
+    expect(serializedAttributes).toContain('[REDACTED_SECRET_A]');
     expect(serializedAttributes).not.toContain('bob@example.com');
     expect(serializedAttributes).not.toContain('secret-token');
   });

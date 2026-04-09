@@ -296,13 +296,15 @@ describe('Tracer', () => {
       expect(mockWriter.spans[0].session_id).toBe(
         mockWriter.spans[1].session_id
       );
-      expect(mockWriter.spans[0].session_name).toContain('[REDACTED_EMAIL]');
-      expect(mockWriter.spans[0].tags.customer_email).toBe('[REDACTED_EMAIL]');
+      expect(mockWriter.spans[0].session_name).toContain('[REDACTED_EMAIL_A]');
+      expect(mockWriter.spans[0].tags.customer_email).toBe(
+        '[REDACTED_EMAIL_A]'
+      );
       expect(mockWriter.spans[0].attributes.authorization).toBe(
-        '[REDACTED_SECRET]'
+        '[REDACTED_SECRET_A]'
       );
       expect(mockWriter.spans[0].attributes.messages[0].content).toContain(
-        '[REDACTED_EMAIL]'
+        '[REDACTED_EMAIL_A]'
       );
     });
 
@@ -328,8 +330,66 @@ describe('Tracer', () => {
       expect(mockWriter.spans[0].session_id).toBe(
         mockWriter.spans[1].session_id
       );
-      expect(mockWriter.spans[0].tags.customer_email).toBe('[REDACTED_EMAIL]');
-      expect(mockWriter.spans[1].tags.customer_email).toBe('[REDACTED_EMAIL]');
+      expect(mockWriter.spans[0].tags.customer_email).toBe(
+        '[REDACTED_EMAIL_A]'
+      );
+      expect(mockWriter.spans[1].tags.customer_email).toBe(
+        '[REDACTED_EMAIL_A]'
+      );
+    });
+
+    it('should reuse placeholders across parent and child spans in one trace', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const parent = tracer.startSpan('parent', {
+        attributes: {
+          email: 'seb@zeroeval.com',
+        },
+      });
+      parent.setIO('parent seb@zeroeval.com', undefined);
+
+      const child = tracer.startSpan('child');
+      child.setIO('child seb@zeroeval.com', 'other alt@example.com');
+      tracer.endSpan(child);
+
+      parent.setError({ message: 'error seb@zeroeval.com' });
+      tracer.endSpan(parent);
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(2);
+
+      const serializedParent = JSON.stringify(
+        mockWriter.spans.find((span: any) => span.name === 'parent')
+      );
+      const serializedChild = JSON.stringify(
+        mockWriter.spans.find((span: any) => span.name === 'child')
+      );
+
+      expect(serializedParent).toContain('[REDACTED_EMAIL_A]');
+      expect(serializedChild).toContain('[REDACTED_EMAIL_A]');
+      expect(serializedChild).toContain('[REDACTED_EMAIL_B]');
+    });
+
+    it('should restart placeholder assignment for different traces', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const trace1 = tracer.startSpan('trace1');
+      trace1.setIO('seb@zeroeval.com', undefined);
+      tracer.endSpan(trace1);
+
+      const trace2 = tracer.startSpan('trace2');
+      trace2.setIO('seb@zeroeval.com', undefined);
+      tracer.endSpan(trace2);
+
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(2);
+      expect(mockWriter.spans[0].input_data).toContain('[REDACTED_EMAIL_A]');
+      expect(mockWriter.spans[1].input_data).toContain('[REDACTED_EMAIL_A]');
     });
   });
 

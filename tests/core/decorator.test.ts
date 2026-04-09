@@ -176,11 +176,11 @@ describe('Span Decorator', () => {
       expect(mockWriter.spans).toHaveLength(1);
 
       const s = mockWriter.spans[0];
-      expect(s.input_data).toContain('[REDACTED_EMAIL]');
-      expect(s.input_data).toContain('[REDACTED_SECRET]');
+      expect(s.input_data).toContain('[REDACTED_EMAIL_A]');
+      expect(s.input_data).toContain('[REDACTED_SECRET_A]');
       expect(s.input_data).not.toContain('alice@example.com');
-      expect(s.output_data).toContain('[REDACTED_PHONE]');
-      expect(s.output_data).toContain('[REDACTED_EMAIL]');
+      expect(s.output_data).toContain('[REDACTED_PHONE_A]');
+      expect(s.output_data).toContain('[REDACTED_EMAIL_A]');
       expect(s.attributes.zeroeval_redaction.enabled).toBe(true);
     });
 

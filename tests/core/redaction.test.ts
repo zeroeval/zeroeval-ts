@@ -53,16 +53,57 @@ describe('PII redaction', () => {
 
     const json = span.toJSON();
 
-    expect(json.input_data).toContain('[REDACTED_EMAIL]');
-    expect(json.input_data).toContain('[REDACTED_PHONE]');
-    expect(json.input_data).toContain('[REDACTED_PAN]');
-    expect(json.input_data).toContain('[REDACTED_SECRET]');
-    expect(json.output_data).toContain('[REDACTED_EMAIL]');
-    expect(json.output_data).toContain('[REDACTED_IP]');
-    expect(json.error_message).toContain('[REDACTED_SECRET]');
+    expect(json.input_data).toContain('[REDACTED_EMAIL_A]');
+    expect(json.input_data).toContain('[REDACTED_PHONE_A]');
+    expect(json.input_data).toContain('[REDACTED_PAN_A]');
+    expect(json.input_data).toContain('[REDACTED_SECRET_A]');
+    expect(json.output_data).toContain('[REDACTED_EMAIL_A]');
+    expect(json.output_data).toContain('[REDACTED_IP_A]');
+    expect(json.error_message).toContain('[REDACTED_SECRET_B]');
     expect(json.error_message).not.toContain('alice@example.com');
     expect(json.error_message).not.toContain('123-45-6789');
     expect(json.attributes).toHaveProperty('zeroeval_redaction');
+  });
+
+  it('should preserve references for repeated exact sensitive values within one span', () => {
+    const mockWriter = new MockSpanWriter();
+    (tracer as any)._writer = mockWriter;
+    (tracer as any)._shuttingDown = false;
+    tracer.configure({
+      redaction: { enabled: true },
+    });
+
+    const repeatedEmail = 'seb@zeroeval.com';
+    const span = tracer.startSpan('reference-span', {
+      attributes: {
+        email: repeatedEmail,
+      },
+      tags: {
+        support_email: repeatedEmail,
+      },
+    });
+
+    span.setIO(
+      `input ${repeatedEmail}`,
+      `output ${repeatedEmail} and other@example.com`
+    );
+    span.setError({
+      message: `error ${repeatedEmail}`,
+    });
+    tracer.endSpan(span);
+    void tracer.flush();
+
+    const payload = mockWriter.spans[0];
+    const serialized = JSON.stringify(payload);
+
+    expect(serialized).toContain('[REDACTED_EMAIL_A]');
+    expect(serialized).toContain('[REDACTED_EMAIL_B]');
+    expect(serialized.match(/\[REDACTED_EMAIL_A\]/g)?.length).toBeGreaterThan(
+      3
+    );
+    expect(payload.attributes.email).toBe('[REDACTED_EMAIL_A]');
+    expect(payload.tags.support_email).toBe('[REDACTED_EMAIL_A]');
+    expect(payload.output_data).toContain('[REDACTED_EMAIL_B]');
   });
 
   it('should preserve existing behavior when redaction is disabled', () => {
@@ -92,8 +133,8 @@ describe('PII redaction', () => {
 
     const json = span.toJSON();
 
-    expect(json.input_data).toContain('[REDACTED_PHONE]');
-    expect(json.output_data).toContain('[REDACTED_SECRET]');
+    expect(json.input_data).toContain('[REDACTED_PHONE_A]');
+    expect(json.output_data).toContain('[REDACTED_SECRET_A]');
   });
 
   it('should handle circular payloads without throwing and keep output serializable', () => {
@@ -109,9 +150,9 @@ describe('PII redaction', () => {
 
     const json = span.toJSON();
 
-    expect(json.input_data).toContain('[REDACTED_EMAIL]');
+    expect(json.input_data).toContain('[REDACTED_EMAIL_A]');
     expect(json.input_data).toContain('[Circular]');
-    expect(json.output_data).toContain('[REDACTED_EMAIL]');
+    expect(json.output_data).toContain('[REDACTED_EMAIL_A]');
     expect(json.output_data).toContain('[Circular]');
   });
 
@@ -129,8 +170,8 @@ describe('PII redaction', () => {
     await tracer.flush();
 
     expect(mockWriter.spans).toHaveLength(1);
-    expect(mockWriter.spans[0].input_data).toContain('[REDACTED_EMAIL]');
-    expect(mockWriter.spans[0].output_data).toContain('[REDACTED_SECRET]');
+    expect(mockWriter.spans[0].input_data).toContain('[REDACTED_EMAIL_A]');
+    expect(mockWriter.spans[0].output_data).toContain('[REDACTED_SECRET_A]');
   });
 
   it('should redact writer debug logs before logging or sending spans', async () => {
@@ -178,8 +219,8 @@ describe('PII redaction', () => {
     ]);
 
     expect(requestBodies).toHaveLength(1);
-    expect(requestBodies[0]).toContain('[REDACTED_EMAIL]');
-    expect(requestBodies[0]).toContain('[REDACTED_PAN]');
+    expect(requestBodies[0]).toContain('[REDACTED_EMAIL_A]');
+    expect(requestBodies[0]).toContain('[REDACTED_PAN_A]');
     expect(requestBodies[0]).not.toContain('alice@example.com');
     expect(requestBodies[0]).not.toContain('4111 1111 1111 1111');
 
@@ -188,8 +229,47 @@ describe('PII redaction', () => {
       .map((item) => String(item))
       .join('\n');
 
-    expect(combinedLogs).toContain('[REDACTED_EMAIL]');
+    expect(combinedLogs).toContain('[REDACTED_EMAIL_A]');
     expect(combinedLogs).not.toContain('alice@example.com');
     expect(combinedLogs).not.toContain('live-token');
+  });
+
+  it('should preserve existing placeholders during writer fail-safe redaction', async () => {
+    const writer = new BackendSpanWriter();
+    writer.setRedactionConfig({ enabled: true });
+
+    const requestBodies: string[] = [];
+    global.fetch = vi.fn().mockImplementation(async (_url, init) => {
+      requestBodies.push(String(init?.body ?? ''));
+      return {
+        ok: true,
+        status: 200,
+        text: async () => 'ok',
+        headers: { forEach: () => undefined },
+      } as Response;
+    });
+
+    await writer.write([
+      {
+        span_id: 'span-2',
+        trace_id: 'trace-2',
+        name: 'writer-placeholder-preservation',
+        start_time: new Date().toISOString(),
+        end_time: new Date().toISOString(),
+        duration_ms: 1,
+        status: 'ok',
+        attributes: {},
+        input_data: 'Known [REDACTED_EMAIL_A] plus alice@example.com',
+        output_data: '[REDACTED_SECRET_A]',
+        tags: {},
+        trace_tags: {},
+        session_tags: {},
+      },
+    ]);
+
+    expect(requestBodies).toHaveLength(1);
+    expect(requestBodies[0]).toContain('[REDACTED_EMAIL_A]');
+    expect(requestBodies[0]).toContain('[REDACTED_SECRET_A]');
+    expect(requestBodies[0]).not.toContain('alice@example.com');
   });
 });

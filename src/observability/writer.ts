@@ -4,6 +4,7 @@ import { getLogger, Logger } from './logger';
 import { getApiUrl, getApiKey } from '../utils/api';
 import {
   attachRedactionMetadata,
+  createRedactionReferenceContext,
   redactAttributes,
   redactErrorInfo,
   redactInputValue,
@@ -14,7 +15,11 @@ import {
   resolveRedactionConfig,
   safeSerialize,
 } from './redaction';
-import type { RedactionConfig, ResolvedRedactionConfig } from './redaction';
+import type {
+  RedactionConfig,
+  RedactionReferenceContext,
+  ResolvedRedactionConfig,
+} from './redaction';
 
 const logger = getLogger('zeroeval.writer');
 
@@ -51,20 +56,48 @@ export class BackendSpanWriter implements SpanWriter {
     }> = [];
     const traceIds = new Set<string>();
     const sessionIds = new Set<string>();
+    const traceReferenceContexts = new Map<string, RedactionReferenceContext>();
 
     const payload = spans.map((s: any) => {
       const base = typeof s.toJSON === 'function' ? s.toJSON() : s;
+      const referenceContext =
+        typeof s?.getRedactionReferenceContext === 'function'
+          ? s.getRedactionReferenceContext()
+          : undefined;
+      const traceReferenceContext =
+        referenceContext ??
+        traceReferenceContexts.get(base.trace_id) ??
+        createRedactionReferenceContext();
+      traceReferenceContexts.set(base.trace_id, traceReferenceContext);
       const attributes = redactAttributes(
         base.attributes,
-        this.redactionConfig
+        this.redactionConfig,
+        traceReferenceContext
       );
-      const tags = redactTags(base.tags, this.redactionConfig);
-      const traceTags = redactTags(base.trace_tags, this.redactionConfig);
-      const sessionTags = redactTags(base.session_tags, this.redactionConfig);
-      const inputData = redactInputValue(base.input_data, this.redactionConfig);
+      const tags = redactTags(
+        base.tags,
+        this.redactionConfig,
+        traceReferenceContext
+      );
+      const traceTags = redactTags(
+        base.trace_tags,
+        this.redactionConfig,
+        traceReferenceContext
+      );
+      const sessionTags = redactTags(
+        base.session_tags,
+        this.redactionConfig,
+        traceReferenceContext
+      );
+      const inputData = redactInputValue(
+        base.input_data,
+        this.redactionConfig,
+        traceReferenceContext
+      );
       const outputData = redactOutputValue(
         base.output_data,
-        this.redactionConfig
+        this.redactionConfig,
+        traceReferenceContext
       );
       const errorInfo = redactErrorInfo(
         {
@@ -72,15 +105,18 @@ export class BackendSpanWriter implements SpanWriter {
           message: base.error_message,
           stack: base.error_stack,
         },
-        this.redactionConfig
+        this.redactionConfig,
+        traceReferenceContext
       );
       const sessionName = redactSessionName(
         base.session_name,
-        this.redactionConfig
+        this.redactionConfig,
+        traceReferenceContext
       );
       const sessionId = redactSessionIdentifier(
         base.session_id,
-        this.redactionConfig
+        this.redactionConfig,
+        traceReferenceContext
       );
       const mergedAttributes = {
         ...(attributes.value ?? {}),
