@@ -47,6 +47,7 @@ type RedactionType = 'EMAIL' | 'PHONE' | 'SSN' | 'PAN' | 'SECRET' | 'IP';
 
 type StringRedactionOptions = {
   stable?: boolean;
+  parseJsonStrings?: boolean;
 };
 
 const EMAIL_REGEX = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
@@ -150,6 +151,23 @@ export function redactOutputValue(
     return { value };
   }
   return redactValue(value, config, createTraversalContext(referenceContext));
+}
+
+export function redactTextValue(
+  value: string,
+  config: ResolvedRedactionConfig,
+  referenceContext?: RedactionReferenceContext
+): RedactionResult<string> {
+  if (!config.enabled) {
+    return { value };
+  }
+
+  return redactString(
+    value,
+    config,
+    { parseJsonStrings: false },
+    referenceContext
+  );
 }
 
 export function redactAttributes(
@@ -438,7 +456,9 @@ function redactObject(
         nextValue[key] = redacted.value;
       }
 
-      metadata = mergeMetadata(metadata, redacted.metadata);
+      if (redacted.value !== rawValue) {
+        metadata = mergeMetadata(metadata, redacted.metadata);
+      }
     }
   } finally {
     context.visiting.delete(value);
@@ -466,6 +486,10 @@ function redactString(
     return { value };
   }
 
+  if (options.parseJsonStrings === undefined) {
+    options.parseJsonStrings = true;
+  }
+
   let nextValue = value;
   let metadata: RedactionMetadata | undefined;
 
@@ -479,6 +503,24 @@ function redactString(
         types: [exactType],
       },
     };
+  }
+
+  if (options.parseJsonStrings && looksLikeJson(value)) {
+    const parsed = tryParseJson(value);
+    if (parsed !== undefined) {
+      const redacted = redactValue(
+        parsed,
+        config,
+        createTraversalContext(referenceContext)
+      );
+      return {
+        value:
+          typeof redacted.value === 'string'
+            ? redacted.value
+            : safeSerialize(redacted.value),
+        metadata: redacted.metadata,
+      };
+    }
   }
 
   nextValue = replaceWithMetadata(

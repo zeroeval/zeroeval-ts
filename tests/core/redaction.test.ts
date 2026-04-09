@@ -4,6 +4,11 @@ import { Span } from '../../src/observability/Span';
 import { tracer } from '../../src/observability/Tracer';
 import { Logger } from '../../src/observability/logger';
 import { BackendSpanWriter } from '../../src/observability/writer';
+import {
+  createRedactionReferenceContext,
+  redactAttributes,
+  resolveRedactionConfig,
+} from '../../src/observability/redaction';
 import { MockSpanWriter } from '../setup';
 
 describe('PII redaction', () => {
@@ -271,6 +276,65 @@ describe('PII redaction', () => {
     expect(requestBodies[0]).toContain('[REDACTED_EMAIL_A]');
     expect(requestBodies[0]).toContain('[REDACTED_SECRET_A]');
     expect(requestBodies[0]).not.toContain('alice@example.com');
+  });
+
+  it('should preserve string-typed wire format for JSON-looking payload strings in writer fail-safe redaction', async () => {
+    const writer = new BackendSpanWriter();
+    writer.setRedactionConfig({ enabled: true });
+
+    const requestBodies: string[] = [];
+    global.fetch = vi.fn().mockImplementation(async (_url, init) => {
+      requestBodies.push(String(init?.body ?? ''));
+      return {
+        ok: true,
+        status: 200,
+        text: async () => 'ok',
+        headers: { forEach: () => undefined },
+      } as Response;
+    });
+
+    await writer.write([
+      {
+        span_id: 'span-3',
+        trace_id: 'trace-3',
+        name: 'writer-string-wire-format',
+        start_time: new Date().toISOString(),
+        end_time: new Date().toISOString(),
+        duration_ms: 1,
+        status: 'ok',
+        attributes: {},
+        input_data:
+          '{"email":"alice@example.com","known":"[REDACTED_EMAIL_A]"}',
+        output_data:
+          '{"token":"Bearer shared-token","known":"[REDACTED_SECRET_A]"}',
+        tags: {},
+        trace_tags: {},
+        session_tags: {},
+      },
+    ]);
+
+    expect(requestBodies).toHaveLength(1);
+    const payload = JSON.parse(requestBodies[0]);
+
+    expect(typeof payload[0].input_data).toBe('string');
+    expect(typeof payload[0].output_data).toBe('string');
+    expect(payload[0].input_data).toContain('[REDACTED_EMAIL_A]');
+    expect(payload[0].output_data).toContain('[REDACTED_SECRET_A]');
+    expect(payload[0].input_data).not.toContain('alice@example.com');
+    expect(payload[0].output_data).not.toContain('shared-token');
+  });
+
+  it('should not inflate metadata for already-redacted sensitive-key object values', () => {
+    const config = resolveRedactionConfig({ enabled: true });
+    const referenceContext = createRedactionReferenceContext();
+    const attributes = {
+      authorization: '[REDACTED_SECRET_A]',
+    };
+
+    const redacted = redactAttributes(attributes, config, referenceContext);
+
+    expect(redacted.value).toBe(attributes);
+    expect(redacted.metadata).toBeUndefined();
   });
 
   it('should reuse identical authorization and cookie header values and separate different ones', () => {

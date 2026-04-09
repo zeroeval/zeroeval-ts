@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createTestTracer, sleep } from '../setup';
+import { Logger } from '../../src/observability/logger';
 
 describe('Tracer', () => {
   let tracer: any;
@@ -7,6 +8,11 @@ describe('Tracer', () => {
 
   beforeEach(() => {
     ({ tracer, mockWriter } = createTestTracer());
+  });
+
+  afterEach(() => {
+    Logger.setDebugMode(false);
+    vi.restoreAllMocks();
   });
 
   describe('span creation', () => {
@@ -336,6 +342,30 @@ describe('Tracer', () => {
       expect(mockWriter.spans[1].tags.customer_email).toBe(
         '[REDACTED_EMAIL_A]'
       );
+    });
+
+    it('should not log raw session identifiers when adding session tags with redaction enabled', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+      Logger.setDebugMode(true);
+      const consoleLogSpy = vi
+        .spyOn(console, 'log')
+        .mockImplementation(() => {});
+      const sessionId = 'alice@example.com';
+
+      const span = tracer.startSpan('span1', { sessionId });
+      tracer.endSpan(span);
+
+      tracer.addSessionTags(sessionId, { customer_email: sessionId });
+
+      const combinedLogs = consoleLogSpy.mock.calls
+        .flat()
+        .map((item) => String(item))
+        .join('\n');
+
+      expect(combinedLogs).toContain('[REDACTED_EMAIL_A]');
+      expect(combinedLogs).not.toContain('alice@example.com');
     });
 
     it('should reuse placeholders across parent and child spans in one trace', () => {

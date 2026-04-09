@@ -9,6 +9,7 @@ import {
   redactErrorInfo,
   redactInputValue,
   redactOutputValue,
+  redactTextValue,
   redactSessionIdentifier,
   redactSessionName,
   redactTags,
@@ -89,16 +90,30 @@ export class BackendSpanWriter implements SpanWriter {
         this.redactionConfig,
         traceReferenceContext
       );
-      const inputData = redactInputValue(
-        base.input_data,
-        this.redactionConfig,
-        traceReferenceContext
-      );
-      const outputData = redactOutputValue(
-        base.output_data,
-        this.redactionConfig,
-        traceReferenceContext
-      );
+      const inputData =
+        typeof base.input_data === 'string'
+          ? redactTextValue(
+              base.input_data,
+              this.redactionConfig,
+              traceReferenceContext
+            )
+          : redactInputValue(
+              base.input_data,
+              this.redactionConfig,
+              traceReferenceContext
+            );
+      const outputData =
+        typeof base.output_data === 'string'
+          ? redactTextValue(
+              base.output_data,
+              this.redactionConfig,
+              traceReferenceContext
+            )
+          : redactOutputValue(
+              base.output_data,
+              this.redactionConfig,
+              traceReferenceContext
+            );
       const errorInfo = redactErrorInfo(
         {
           code: base.error_code,

@@ -312,14 +312,23 @@ export class Tracer {
       matchingSpans.push(span);
     }
 
+    const matchedSpan = matchingSpans.find(
+      (span) => span.sessionLookupId === sessionId
+    );
     const redactedTags = redactTags(
       tags,
       this._redaction,
-      matchingSpans
-        .find((span) => span.sessionLookupId === sessionId)
-        ?.getRedactionReferenceContext()
+      matchedSpan?.getRedactionReferenceContext()
     );
-    logger.debug(`Adding session tags to ${sessionId}:`, redactedTags.value);
+    const logSessionId =
+      matchedSpan?.sessionId ??
+      redactSessionIdentifier(
+        sessionId,
+        this._redaction,
+        matchedSpan?.getRedactionReferenceContext()
+      ).value ??
+      '[session]';
+    logger.debug(`Adding session tags to ${logSessionId}:`, redactedTags.value);
     this._sessionTags[sessionId] = {
       ...(this._sessionTags[sessionId] ?? {}),
       ...(redactedTags.value ?? {}),
@@ -404,7 +413,7 @@ export class Tracer {
   private async _setupAvailableIntegrations(): Promise<void> {
     logger.info('Checking for available integrations...');
 
-    const available = await discoverIntegrations();
+    const available = (await discoverIntegrations()) ?? {};
 
     for (const [key, Ctor] of Object.entries(available)) {
       try {
