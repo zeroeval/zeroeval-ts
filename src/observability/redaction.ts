@@ -174,14 +174,6 @@ export function redactOutputValue(
   return redactValue(value, config, createTraversalContext(referenceContext));
 }
 
-export function redactTextValue(
-  value: string,
-  config: ResolvedRedactionConfig,
-  referenceContext?: RedactionReferenceContext
-): RedactionResult<string> {
-  return redactStringValue(value, config, referenceContext);
-}
-
 export function redactInputTextValue(
   value: string,
   config: ResolvedRedactionConfig,

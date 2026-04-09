@@ -25,7 +25,10 @@ export function setTag(
 
   if (typeof target !== 'string') {
     // Span instance – just mutate in-place
-    Object.assign(target.tags, tracer.sanitizeTags(tags, target.traceId));
+    Object.assign(
+      target.tags,
+      tracer.sanitizeTags(tags, target.traceId, target.attributes)
+    );
   } else {
     // Heuristic: first check active trace ids
     if (tracer.isActiveTrace(target)) {
