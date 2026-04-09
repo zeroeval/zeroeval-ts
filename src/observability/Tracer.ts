@@ -394,20 +394,47 @@ export class Tracer {
       matchingSpans.push(span);
     }
 
-    const matchedSpans = matchingSpans.filter(
-      (span) =>
-        span.sessionLookupId === sessionId || span.sessionId === sessionId
+    const rawMatchedSpans = matchingSpans.filter(
+      (span) => span.sessionLookupId === sessionId
     );
-    const matchedSpan = matchedSpans[0];
-    if (matchedSpans.length === 0) {
-      const logSessionId =
-        redactSessionIdentifier(sessionId, this._redaction).value ??
-        '[session]';
+    const publicMatchedSpans =
+      rawMatchedSpans.length > 0
+        ? rawMatchedSpans
+        : matchingSpans.filter((span) => span.sessionId === sessionId);
+    const matchedSpan = publicMatchedSpans[0];
+    const logSessionId =
+      matchedSpan?.sessionId ??
+      redactSessionIdentifier(
+        sessionId,
+        this._redaction,
+        matchedSpan?.getRedactionReferenceContext()
+      ).value ??
+      '[session]';
+
+    if (publicMatchedSpans.length === 0) {
       logger.debug(
         `Skipping session tags for ${logSessionId}; no active or buffered spans matched`
       );
       return;
     }
+
+    let matchedSpans = publicMatchedSpans;
+    if (rawMatchedSpans.length === 0) {
+      const matchedTraceIds = new Set(matchedSpans.map((span) => span.traceId));
+      const matchedSessionLookupIds = new Set(
+        matchedSpans
+          .map((span) => span.sessionLookupId)
+          .filter((value): value is string => Boolean(value))
+      );
+
+      if (matchedTraceIds.size !== 1 || matchedSessionLookupIds.size !== 1) {
+        logger.debug(
+          `Skipping session tags for ${logSessionId}; public session identifier matched multiple traces or session buckets`
+        );
+        return;
+      }
+    }
+
     const sessionTagKeys = new Set<string>();
     for (const span of matchedSpans) {
       if (span.sessionLookupId) {
@@ -419,14 +446,6 @@ export class Tracer {
       this._redaction,
       matchedSpan?.getRedactionReferenceContext()
     );
-    const logSessionId =
-      matchedSpan?.sessionId ??
-      redactSessionIdentifier(
-        sessionId,
-        this._redaction,
-        matchedSpan?.getRedactionReferenceContext()
-      ).value ??
-      '[session]';
     logger.debug(`Adding session tags to ${logSessionId}:`, redactedTags.value);
     for (const sessionTagKey of sessionTagKeys) {
       this._sessionTags[sessionTagKey] = {

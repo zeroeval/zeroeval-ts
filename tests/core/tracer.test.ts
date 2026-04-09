@@ -386,6 +386,35 @@ describe('Tracer', () => {
       );
     });
 
+    it('should not fan session tags out across unrelated traces for ambiguous public session identifiers', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const span1 = tracer.startSpan('trace-1', {
+        sessionId: 'alice@example.com',
+      });
+      const publicSessionId = span1.sessionId;
+      tracer.endSpan(span1);
+
+      const span2 = tracer.startSpan('trace-2', {
+        sessionId: 'bob@example.com',
+      });
+      expect(span2.sessionId).toBe(publicSessionId);
+      tracer.endSpan(span2);
+
+      tracer.addSessionTags(publicSessionId, {
+        customer_email: 'alice@example.com',
+      });
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(2);
+      for (const span of mockWriter.spans) {
+        expect(span.tags.customer_email).toBeUndefined();
+        expect(span.session_tags.customer_email).toBeUndefined();
+      }
+    });
+
     it('should not log raw session identifiers when adding session tags with redaction enabled', () => {
       tracer.configure({
         redaction: { enabled: true },
