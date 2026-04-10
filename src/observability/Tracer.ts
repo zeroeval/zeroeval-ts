@@ -300,7 +300,6 @@ export class Tracer {
       this._buffer.push(...ordered);
       this._bufferedTraceIds.add(span.traceId);
 
-<<<<<<< HEAD
       const traceSessionLookupId = this._traceSessionLookupIds[span.traceId];
       delete this._traceSessionLookupIds[span.traceId];
       if (traceSessionLookupId) {
