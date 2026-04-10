@@ -8,6 +8,7 @@ import {
   createRedactionReferenceContext,
   redactAttributes,
   redactSessionIdentifier,
+  redactTags,
   resolveRedactionConfig,
 } from '../../src/observability/redaction';
 import { MockSpanWriter } from '../setup';
@@ -427,6 +428,52 @@ describe('PII redaction', () => {
 
     expect(redacted.value).toBe(attributes);
     expect(redacted.metadata).toBeUndefined();
+  });
+
+  it('should not count empty or missing sensitive-key values as redacted', () => {
+    const config = resolveRedactionConfig({ enabled: true });
+
+    const attributes = redactAttributes(
+      {
+        password: '',
+        apiKey: null,
+        refreshToken: undefined,
+        confirmEmail: 'alice@example.com',
+      },
+      config,
+      createRedactionReferenceContext()
+    );
+
+    expect(attributes.value).toMatchObject({
+      password: '',
+      apiKey: null,
+      refreshToken: undefined,
+      confirmEmail: '[REDACTED_EMAIL_A]',
+    });
+    expect(attributes.metadata).toEqual({
+      enabled: true,
+      count: 1,
+      types: ['EMAIL'],
+    });
+
+    const tags = redactTags(
+      {
+        authToken: '',
+        backupEmail: 'alice@example.com',
+      },
+      config,
+      createRedactionReferenceContext()
+    );
+
+    expect(tags.value).toEqual({
+      authToken: '',
+      backupEmail: '[REDACTED_EMAIL_A]',
+    });
+    expect(tags.metadata).toEqual({
+      enabled: true,
+      count: 1,
+      types: ['EMAIL'],
+    });
   });
 
   it('should redact camelCase and PascalCase sensitive keys by normalized key name', () => {

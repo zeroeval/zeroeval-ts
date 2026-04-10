@@ -151,6 +151,14 @@ export class Tracer {
     attachRedactionMetadata(span.attributes, metadata);
   }
 
+  private hasMutableTraceState(traceId: string): boolean {
+    return (
+      traceId in this._activeTraceCounts ||
+      traceId in this._traceBuckets ||
+      this._buffer.some((span) => span.traceId === traceId)
+    );
+  }
+
   /* TRACING ---------------------------------------------------------------*/
   startSpan(
     name: string,
@@ -327,6 +335,13 @@ export class Tracer {
 
   /* TAG HELPERS -----------------------------------------------------------*/
   addTraceTags(traceId: string, tags: Record<string, string>): void {
+    if (!this.hasMutableTraceState(traceId)) {
+      logger.debug(
+        `Skipping trace tags for ${traceId}; no active or buffered spans matched`
+      );
+      return;
+    }
+
     const redactedTags = redactTags(
       tags,
       this._redaction,

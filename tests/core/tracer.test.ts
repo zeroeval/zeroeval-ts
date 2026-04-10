@@ -162,7 +162,7 @@ describe('Tracer', () => {
       ];
 
       await Promise.all(promises);
-      tracer.flush();
+      await tracer.flush();
 
       expect(mockWriter.spans).toHaveLength(6); // 3 traces * 2 spans each
 
@@ -585,6 +585,33 @@ describe('Tracer', () => {
       expect(tracer._sessionTagMetadata).toEqual({});
     });
 
+    it('should ignore trace tags added after a trace has already been flushed', async () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const span = tracer.startSpan('flushed-trace', {
+        attributes: {
+          owner_email: 'seb@zeroeval.com',
+        },
+      });
+      tracer.endSpan(span);
+
+      await tracer.flush();
+
+      tracer.addTraceTags(span.traceId, {
+        support_email: 'seb@zeroeval.com',
+      });
+
+      expect(tracer._traceTags).toEqual({});
+      expect(tracer._traceTagMetadata).toEqual({});
+      expect(mockWriter.spans).toHaveLength(1);
+      expect(mockWriter.spans[0].tags.support_email).toBeUndefined();
+      expect(mockWriter.spans[0].attributes.owner_email).toBe(
+        '[REDACTED_EMAIL_A]'
+      );
+    });
+
     it('should decrement session counts using the root session lookup key for the trace', () => {
       const root = tracer.startSpan('root', { sessionId: 'session-root' });
       const child = tracer.startSpan('child');
@@ -663,8 +690,7 @@ describe('Tracer', () => {
       const span = tracer.startSpan('test');
       tracer.endSpan(span);
 
-      // Should not throw
-      expect(() => tracer.flush()).not.toThrow();
+      await expect(tracer.flush()).rejects.toThrow('Write failed');
     });
   });
 
@@ -687,7 +713,7 @@ describe('Tracer', () => {
   });
 
   describe('trace ordering', () => {
-    it('should order spans with parents before children', () => {
+    it('should order spans with parents before children', async () => {
       // Create spans in reverse order
       const child2 = tracer.startSpan('child2');
       const child1 = tracer.startSpan('child1');
@@ -702,7 +728,7 @@ describe('Tracer', () => {
       const root = tracer.startSpan('root');
       tracer.endSpan(root);
 
-      tracer.flush();
+      await tracer.flush();
 
       // Root should come first in the buffer
       const rootIndex = mockWriter.spans.findIndex(

@@ -234,19 +234,23 @@ export function redactTags(
     let redacted: RedactionResult<string>;
 
     if (isSensitiveKey(key, config)) {
-      const type = detectRedactionType(rawValue);
-      const redactedValue = redactSensitiveValueByType(
-        type,
-        rawValue,
-        referenceContext
-      );
-      redacted = {
-        value: redactedValue,
-        metadata:
-          redactedValue !== rawValue
-            ? { enabled: true, count: 1, types: [type] }
-            : undefined,
-      };
+      if (!hasRedactableSensitiveValue(rawValue)) {
+        redacted = { value: rawValue };
+      } else {
+        const type = detectRedactionType(rawValue);
+        const redactedValue = redactSensitiveValueByType(
+          type,
+          rawValue,
+          referenceContext
+        );
+        redacted = {
+          value: redactedValue,
+          metadata:
+            redactedValue !== rawValue
+              ? { enabled: true, count: 1, types: [type] }
+              : undefined,
+        };
+      }
     } else {
       redacted = redactString(rawValue, config, {}, referenceContext);
     }
@@ -477,19 +481,23 @@ function redactObject(
       let redacted: RedactionResult<unknown>;
 
       if (isSensitiveKey(key, config)) {
-        const type = detectRedactionType(rawValue);
-        const redactedValue = redactSensitiveValueByType(
-          type,
-          rawValue,
-          context.referenceContext
-        );
-        redacted = {
-          value: redactedValue,
-          metadata:
-            redactedValue !== rawValue
-              ? { enabled: true, count: 1, types: [type] }
-              : undefined,
-        };
+        if (!hasRedactableSensitiveValue(rawValue)) {
+          redacted = { value: rawValue };
+        } else {
+          const type = detectRedactionType(rawValue);
+          const redactedValue = redactSensitiveValueByType(
+            type,
+            rawValue,
+            context.referenceContext
+          );
+          redacted = {
+            value: redactedValue,
+            metadata:
+              redactedValue !== rawValue
+                ? { enabled: true, count: 1, types: [type] }
+                : undefined,
+          };
+        }
       } else {
         redacted = redactValue(rawValue, config, context);
       }
@@ -1022,6 +1030,18 @@ function normalizeKey(value: string): string {
     .toLowerCase()
     .replace(/[\s./-]+/g, '_')
     .replace(/_+/g, '_');
+}
+
+function hasRedactableSensitiveValue(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return false;
+  }
+
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+
+  return true;
 }
 
 function exactMatchesEntireString(regex: RegExp, value: string): boolean {
