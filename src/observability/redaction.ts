@@ -61,9 +61,16 @@ const API_KEY_REGEX =
   /\b(?:sk|pk|rk|ghp|gho|ghu|ghs|github_pat|xox[baprs]-|AIza|ya29|AKIA|ASIA)[A-Za-z0-9._-]{8,}\b/g;
 const BEARER_REGEX =
   /\bBearer\s+[A-Za-z0-9\-._~+/]+=*(?=[^A-Za-z0-9\-._~+/=]|$)/gi;
-const AUTH_HEADER_REGEX =
-  /\b(authorization|proxy-authorization)\s*([:=])\s*([^\r\n]+)/gi;
-const COOKIE_HEADER_REGEX = /\b(set-cookie|cookie)\s*([:=])\s*([^\r\n]+)/gi;
+const HEADER_BOUNDARY =
+  '(?=\\s*[;,]\\s*(?:authorization|proxy-authorization|cookie|set-cookie)\\s*[:=]|[\\r\\n]|$)';
+const AUTH_HEADER_REGEX = new RegExp(
+  `\\b(authorization|proxy-authorization)\\s*([:=])\\s*([^\\r\\n]+?)${HEADER_BOUNDARY}`,
+  'gi'
+);
+const COOKIE_HEADER_REGEX = new RegExp(
+  `\\b(set-cookie|cookie)\\s*([:=])\\s*([^\\r\\n]+?)${HEADER_BOUNDARY}`,
+  'gi'
+);
 const PHONE_REGEX = /(?:\+?\d[\d().\s-]{7,}\d)/g;
 const PAN_CANDIDATE_REGEX = /\b(?:\d[ -]?){13,19}\b/g;
 const EXACT_PLACEHOLDER_REGEX = /^\[REDACTED_[A-Z]+(?:_[A-Z0-9]+)?\]$/;
@@ -872,7 +879,7 @@ function redactSensitiveValueByType(
 
   const normalized = normalizeSensitiveValue(type, rawString);
   if (!normalized) {
-    return createPlaceholder(type);
+    return rawString;
   }
 
   if (!referenceContext) {
