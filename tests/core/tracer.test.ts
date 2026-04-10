@@ -726,7 +726,7 @@ describe('Tracer', () => {
   });
 
   describe('isActiveTrace', () => {
-    it('should correctly identify active traces', () => {
+    it('should correctly identify active traces', async () => {
       const span1 = tracer.startSpan('span1');
       const traceId = span1.traceId;
 
@@ -738,7 +738,7 @@ describe('Tracer', () => {
       // Trace should still be active until flushed
       expect(tracer.isActiveTrace(traceId)).toBe(true);
 
-      tracer.flush();
+      await tracer.flush();
 
       // After flush, trace should not be active
       expect(tracer.isActiveTrace(traceId)).toBe(false);

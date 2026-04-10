@@ -482,9 +482,6 @@ export class Tracer {
     this._lastFlush = Date.now();
     const spansToFlush = this._buffer.splice(0);
     const flushedTraceIds = new Set(spansToFlush.map((span) => span.traceId));
-    for (const traceId of flushedTraceIds) {
-      this._bufferedTraceIds.delete(traceId);
-    }
 
     try {
       const startTime = Date.now();
@@ -492,6 +489,7 @@ export class Tracer {
       const duration = Date.now() - startTime;
 
       for (const traceId of flushedTraceIds) {
+        this._bufferedTraceIds.delete(traceId);
         delete this._traceRedactionContexts[traceId];
         delete this._traceSessionLookupIds[traceId];
         if (!(traceId in this._activeTraceCounts)) {
@@ -520,9 +518,6 @@ export class Tracer {
       );
       // Re-add the spans to the buffer for retry
       this._buffer.unshift(...spansToFlush);
-      for (const traceId of flushedTraceIds) {
-        this._bufferedTraceIds.add(traceId);
-      }
       throw error;
     }
   }
