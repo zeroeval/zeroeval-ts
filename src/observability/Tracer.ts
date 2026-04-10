@@ -53,6 +53,7 @@ export class Tracer {
 
   private _activeTraceCounts: Record<string, number> = {};
   private _traceBuckets: Record<string, Span[]> = {};
+  private _traceSessionLookupIds: Record<string, string | undefined> = {};
   private _traceTags: Record<string, Record<string, string>> = {};
   private _traceTagMetadata: Record<string, RedactionMetadata | undefined> = {};
   private _sessionTags: Record<string, Record<string, string>> = {};
@@ -263,6 +264,7 @@ export class Tracer {
       (this._activeTraceCounts[span.traceId] || 0) + 1;
 
     if (!parent && span.sessionLookupId) {
+      this._traceSessionLookupIds[span.traceId] = span.sessionLookupId;
       this._activeSessionCounts[span.sessionLookupId] =
         (this._activeSessionCounts[span.sessionLookupId] || 0) + 1;
     }
@@ -298,10 +300,13 @@ export class Tracer {
       this._buffer.push(...ordered);
       this._bufferedTraceIds.add(span.traceId);
 
-      if (span.sessionLookupId) {
-        this._activeSessionCounts[span.sessionLookupId] -= 1;
-        if (this._activeSessionCounts[span.sessionLookupId] === 0) {
-          delete this._activeSessionCounts[span.sessionLookupId];
+<<<<<<< HEAD
+      const traceSessionLookupId = this._traceSessionLookupIds[span.traceId];
+      delete this._traceSessionLookupIds[span.traceId];
+      if (traceSessionLookupId) {
+        this._activeSessionCounts[traceSessionLookupId] -= 1;
+        if (this._activeSessionCounts[traceSessionLookupId] === 0) {
+          delete this._activeSessionCounts[traceSessionLookupId];
         }
       }
 
@@ -489,6 +494,7 @@ export class Tracer {
 
       for (const traceId of flushedTraceIds) {
         delete this._traceRedactionContexts[traceId];
+        delete this._traceSessionLookupIds[traceId];
         if (!(traceId in this._activeTraceCounts)) {
           delete this._traceTags[traceId];
           delete this._traceTagMetadata[traceId];

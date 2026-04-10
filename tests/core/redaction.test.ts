@@ -516,7 +516,7 @@ describe('PII redaction', () => {
     const json = span.toJSON();
     const secretTokens = Array.from(
       json.input_data.matchAll(
-        /(Authorization|authorization|Cookie|cookie): (\[REDACTED_SECRET_[A-Z]+\])/g
+        /(Authorization|authorization|Cookie|cookie): (?:Bearer )?(\[REDACTED_SECRET_[A-Z]+\])/g
       )
     ).map((match) => ({
       name: match[1],
@@ -537,5 +537,29 @@ describe('PII redaction', () => {
     expect(secretTokens[2].token).not.toBe(secretTokens[5].token);
     expect(json.input_data).not.toContain('shared-token');
     expect(json.input_data).not.toContain('abc123');
+  });
+
+  it('should reuse the same placeholder for bearer tokens in standalone text and authorization headers', () => {
+    const span = new Span('bearer-consistency', undefined, {
+      enabled: true,
+    });
+
+    span.setIO(
+      [
+        'Bearer shared-token',
+        'Authorization: Bearer shared-token',
+        'Proxy-Authorization: Bearer shared-token',
+      ].join('\n'),
+      undefined
+    );
+
+    const json = span.toJSON();
+    const tokens = Array.from(
+      json.input_data.matchAll(/\[REDACTED_SECRET_[A-Z]+\]/g)
+    ).map((match) => match[0]);
+
+    expect(tokens).toHaveLength(3);
+    expect(new Set(tokens).size).toBe(1);
+    expect(json.input_data).not.toContain('shared-token');
   });
 });

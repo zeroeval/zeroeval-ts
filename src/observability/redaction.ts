@@ -554,12 +554,22 @@ function redactString(
     nextValue,
     AUTH_HEADER_REGEX,
     'SECRET',
-    (_match, headerName, separator, headerValue) =>
-      `${headerName}${separator} ${redactSensitiveValueByType(
+    (_match, headerName, separator, headerValue) => {
+      const bearerMatch = headerValue.match(/^Bearer\s+(.+)$/i);
+      if (bearerMatch) {
+        return `${headerName}${separator} Bearer ${redactSensitiveValueByType(
+          'SECRET',
+          bearerMatch[1],
+          referenceContext
+        )}`;
+      }
+
+      return `${headerName}${separator} ${redactSensitiveValueByType(
         'SECRET',
         headerValue,
         referenceContext
-      )}`,
+      )}`;
+    },
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
     },

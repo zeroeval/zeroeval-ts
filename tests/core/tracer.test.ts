@@ -585,6 +585,21 @@ describe('Tracer', () => {
       expect(tracer._sessionTagMetadata).toEqual({});
     });
 
+    it('should decrement session counts using the root session lookup key for the trace', () => {
+      const root = tracer.startSpan('root', { sessionId: 'session-root' });
+      const child = tracer.startSpan('child');
+
+      child.sessionLookupId = 'tampered-child-session';
+
+      tracer.endSpan(child);
+      tracer.endSpan(root);
+
+      expect(tracer._activeSessionCounts).toEqual({});
+      expect(tracer._sessionTags).toEqual({});
+      expect(tracer._sessionTagMetadata).toEqual({});
+      expect(tracer._traceSessionLookupIds).toEqual({});
+    });
+
     it('should not retain session tag buckets when no active or buffered spans match', () => {
       tracer.configure({
         redaction: { enabled: true },
