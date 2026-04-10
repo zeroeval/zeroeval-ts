@@ -3,8 +3,6 @@ import type { Signal } from './signals';
 import {
   attachRedactionMetadata,
   createRedactionReferenceContext,
-  redactAttributes,
-  redactErrorInfo,
   redactInputValue,
   redactOutputValue,
   resolveRedactionConfig,
@@ -75,13 +73,7 @@ export class Span {
   }
 
   setError(info: ErrorInfo): void {
-    const redacted = redactErrorInfo(
-      info,
-      this.redactionConfig,
-      this.redactionReferenceContext
-    );
-    this.error = redacted.value;
-    attachRedactionMetadata(this.attributes, redacted.metadata);
+    this.error = info;
     this.status = 'error';
   }
 
@@ -113,15 +105,7 @@ export class Span {
   }
 
   setAttributes(attrs: Record<string, unknown>): void {
-    const redacted = redactAttributes(
-      attrs,
-      this.redactionConfig,
-      this.redactionReferenceContext
-    );
-    if (redacted.value) {
-      Object.assign(this.attributes, redacted.value);
-    }
-    attachRedactionMetadata(this.attributes, redacted.metadata);
+    Object.assign(this.attributes, attrs);
   }
 
   addSignal(

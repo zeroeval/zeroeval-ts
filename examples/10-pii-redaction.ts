@@ -14,7 +14,7 @@
 import * as ze from 'zeroeval';
 
 ze.init({
-  apiKey: 'placeholder',
+  apiKey: 'sk_ze_CFtkIS9B3Awisk_ze_E6oxXlOmN_5SBohahDi-r59bJKCHgTfq7FBwqYaRzOQ',
   redaction: {
     enabled: true,
   },

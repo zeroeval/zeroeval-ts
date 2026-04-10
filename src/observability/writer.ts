@@ -5,15 +5,10 @@ import { getApiUrl, getApiKey } from '../utils/api';
 import {
   attachRedactionMetadata,
   createRedactionReferenceContext,
-  redactAttributes,
-  redactErrorInfo,
   redactInputTextValue,
   redactInputValue,
   redactOutputTextValue,
   redactOutputValue,
-  redactSessionIdentifier,
-  redactSessionName,
-  redactTags,
   resolveRedactionConfig,
   safeSerialize,
 } from './redaction';
@@ -72,26 +67,6 @@ export class BackendSpanWriter implements SpanWriter {
         traceReferenceContexts.get(base.trace_id) ??
         createRedactionReferenceContext();
       traceReferenceContexts.set(base.trace_id, traceReferenceContext);
-      const attributes = redactAttributes(
-        base.attributes,
-        this.redactionConfig,
-        traceReferenceContext
-      );
-      const tags = redactTags(
-        base.tags,
-        this.redactionConfig,
-        traceReferenceContext
-      );
-      const traceTags = redactTags(
-        base.trace_tags,
-        this.redactionConfig,
-        traceReferenceContext
-      );
-      const sessionTags = redactTags(
-        base.session_tags,
-        this.redactionConfig,
-        traceReferenceContext
-      );
       const inputData =
         typeof base.input_data === 'string'
           ? redactInputTextValue(
@@ -116,38 +91,12 @@ export class BackendSpanWriter implements SpanWriter {
               this.redactionConfig,
               traceReferenceContext
             );
-      const errorInfo = redactErrorInfo(
-        {
-          code: base.error_code,
-          message: base.error_message,
-          stack: base.error_stack,
-        },
-        this.redactionConfig,
-        traceReferenceContext
-      );
-      const sessionName = redactSessionName(
-        base.session_name,
-        this.redactionConfig,
-        traceReferenceContext
-      );
-      const sessionId = redactSessionIdentifier(
-        base.session_id,
-        this.redactionConfig,
-        traceReferenceContext
-      );
       const mergedAttributes = {
-        ...(attributes.value ?? {}),
+        ...(base.attributes ?? {}),
       };
 
-      attachRedactionMetadata(mergedAttributes, attributes.metadata);
-      attachRedactionMetadata(mergedAttributes, tags.metadata);
-      attachRedactionMetadata(mergedAttributes, traceTags.metadata);
-      attachRedactionMetadata(mergedAttributes, sessionTags.metadata);
       attachRedactionMetadata(mergedAttributes, inputData.metadata);
       attachRedactionMetadata(mergedAttributes, outputData.metadata);
-      attachRedactionMetadata(mergedAttributes, errorInfo.metadata);
-      attachRedactionMetadata(mergedAttributes, sessionName.metadata);
-      attachRedactionMetadata(mergedAttributes, sessionId.metadata);
 
       if (base.signals && Object.keys(base.signals).length > 0) {
         spansWithSignals.push({ spanId: base.span_id, signals: base.signals });
@@ -156,17 +105,16 @@ export class BackendSpanWriter implements SpanWriter {
       if (base.session_id) sessionIds.add(base.session_id);
       const lookupId =
         typeof s?._sessionLookupId === 'string' ? s._sessionLookupId : undefined;
-      if (lookupId && sessionId.value) {
-        sessionLookupToRedacted.set(lookupId, sessionId.value);
+      if (lookupId && base.session_id) {
+        sessionLookupToRedacted.set(lookupId, base.session_id);
       }
 
-      // Extract kind from redacted attributes (default to 'generic')
       const kind = mergedAttributes.kind ?? 'generic';
 
       return {
         id: base.span_id,
-        session_id: sessionId.value,
-        session_name: sessionName.value,
+        session_id: base.session_id,
+        session_name: base.session_name,
         trace_id: base.trace_id,
         parent_span_id: base.parent_id,
         name: base.name,
@@ -187,12 +135,12 @@ export class BackendSpanWriter implements SpanWriter {
         code: base.code ?? base.attributes?.code,
         code_filepath: base.code_filepath ?? base.attributes?.code_filepath,
         code_lineno: base.code_lineno ?? base.attributes?.code_lineno,
-        error_code: errorInfo.value?.code,
-        error_message: errorInfo.value?.message,
-        error_stack: String(errorInfo.value?.stack ?? ''),
-        tags: tags.value,
-        trace_tags: traceTags.value,
-        session_tags: sessionTags.value,
+        error_code: base.error_code,
+        error_message: base.error_message,
+        error_stack: String(base.error_stack ?? ''),
+        tags: base.tags,
+        trace_tags: base.trace_tags,
+        session_tags: base.session_tags,
       };
     });
 

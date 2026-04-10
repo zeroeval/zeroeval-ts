@@ -2,10 +2,6 @@ export interface RedactionConfig {
   enabled: boolean;
   redactInputs?: boolean;
   redactOutputs?: boolean;
-  redactAttributes?: boolean;
-  redactErrors?: boolean;
-  redactSessionNames?: boolean;
-  redactTagValues?: boolean;
   sensitiveKeys?: string[];
   customPatterns?: Array<RegExp | string>;
 }
@@ -15,10 +11,6 @@ export interface ResolvedRedactionConfig {
   enabled: boolean;
   redactInputs: boolean;
   redactOutputs: boolean;
-  redactAttributes: boolean;
-  redactErrors: boolean;
-  redactSessionNames: boolean;
-  redactTagValues: boolean;
   sensitiveKeys: string[];
   customPatterns: RegExp[];
 }
@@ -124,10 +116,6 @@ export function resolveRedactionConfig(
     enabled,
     redactInputs: enabled && (config?.redactInputs ?? true),
     redactOutputs: enabled && (config?.redactOutputs ?? true),
-    redactAttributes: enabled && (config?.redactAttributes ?? true),
-    redactErrors: enabled && (config?.redactErrors ?? true),
-    redactSessionNames: enabled && (config?.redactSessionNames ?? true),
-    redactTagValues: enabled && (config?.redactTagValues ?? true),
     sensitiveKeys: Array.from(
       new Set(
         [...DEFAULT_SENSITIVE_KEYS, ...(config?.sensitiveKeys ?? [])].map(
@@ -209,139 +197,44 @@ function redactStringValue(
 
 export function redactAttributes(
   value: Record<string, unknown> | undefined,
-  config: ResolvedRedactionConfig,
-  referenceContext?: RedactionReferenceContext
+  _config: ResolvedRedactionConfig,
+  _referenceContext?: RedactionReferenceContext
 ): RedactionResult<Record<string, unknown> | undefined> {
-  if (!value || !config.enabled || !config.redactAttributes) {
-    return { value };
-  }
-  return redactObject(value, config, createTraversalContext(referenceContext));
+  return { value };
 }
 
 export function redactTags(
   value: Record<string, string> | undefined,
-  config: ResolvedRedactionConfig,
-  referenceContext?: RedactionReferenceContext
+  _config: ResolvedRedactionConfig,
+  _referenceContext?: RedactionReferenceContext
 ): RedactionResult<Record<string, string> | undefined> {
-  if (!value || !config.enabled || !config.redactTagValues) {
-    return { value };
-  }
-
-  let nextValue: Record<string, string> | undefined;
-  let metadata: RedactionMetadata | undefined;
-
-  for (const [key, rawValue] of Object.entries(value)) {
-    let redacted: RedactionResult<string>;
-
-    if (isSensitiveKey(key, config)) {
-      if (!hasRedactableSensitiveValue(rawValue)) {
-        redacted = { value: rawValue };
-      } else {
-        const type = detectRedactionType(rawValue);
-        const redactedValue = redactSensitiveValueByType(
-          type,
-          rawValue,
-          referenceContext
-        );
-        redacted = {
-          value: redactedValue,
-          metadata:
-            redactedValue !== rawValue
-              ? { enabled: true, count: 1, types: [type] }
-              : undefined,
-        };
-      }
-    } else {
-      redacted = redactString(rawValue, config, {}, referenceContext);
-    }
-
-    if (!nextValue && redacted.value !== rawValue) {
-      nextValue = { ...value };
-    }
-
-    if (nextValue) {
-      nextValue[key] = redacted.value;
-    }
-
-    if (redacted.value !== rawValue) {
-      metadata = mergeMetadata(metadata, redacted.metadata);
-    }
-  }
-
-  return { value: nextValue ?? value, metadata };
+  return { value };
 }
 
 export function redactSessionName(
   value: string | undefined,
-  config: ResolvedRedactionConfig,
-  referenceContext?: RedactionReferenceContext
+  _config: ResolvedRedactionConfig,
+  _referenceContext?: RedactionReferenceContext
 ): RedactionResult<string | undefined> {
-  if (!value || !config.enabled || !config.redactSessionNames) {
-    return { value };
-  }
-
-  return redactString(value, config, {}, referenceContext);
+  return { value };
 }
 
 export function redactSessionIdentifier(
   value: string | undefined,
-  config: ResolvedRedactionConfig,
-  referenceContext?: RedactionReferenceContext
+  _config: ResolvedRedactionConfig,
+  _referenceContext?: RedactionReferenceContext
 ): RedactionResult<string | undefined> {
-  if (!value || !config.enabled) {
-    return { value };
-  }
-
-  if (isExactPlaceholder(value)) {
-    return { value };
-  }
-
-  const type = detectExactMatchType(value, config);
-  if (!type) {
-    return { value };
-  }
-
-  return {
-    value: redactSensitiveValueByType(type, value, referenceContext),
-    metadata: {
-      enabled: true,
-      count: 1,
-      types: [type],
-    },
-  };
+  return { value };
 }
 
 export function redactErrorInfo(
   error: { code?: string; message?: string; stack?: string } | undefined,
-  config: ResolvedRedactionConfig,
-  referenceContext?: RedactionReferenceContext
+  _config: ResolvedRedactionConfig,
+  _referenceContext?: RedactionReferenceContext
 ): RedactionResult<
   { code?: string; message?: string; stack?: string } | undefined
 > {
-  if (!error || !config.enabled || !config.redactErrors) {
-    return { value: error };
-  }
-
-  const message: RedactionResult<string | undefined> = error.message
-    ? redactString(error.message, config, {}, referenceContext)
-    : { value: error.message };
-  const stack: RedactionResult<string | undefined> = error.stack
-    ? redactString(error.stack, config, {}, referenceContext)
-    : { value: error.stack };
-
-  const metadata = mergeMetadata(message.metadata, stack.metadata);
-  if (!metadata) {
-    return { value: error };
-  }
-
-  return {
-    value: {
-      ...error,
-      message: message.value,
-      stack: stack.value,
-    },
-    metadata,
-  };
+  return { value: error };
 }
 
 export function attachRedactionMetadata(
