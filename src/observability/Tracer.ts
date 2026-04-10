@@ -210,7 +210,7 @@ export class Tracer {
       this._redaction,
       referenceContext
     );
-    const sessionTagLookupId = parent?.sessionLookupId ?? opts.sessionId;
+    const sessionTagLookupId = parent?._sessionLookupId ?? opts.sessionId;
     const inheritedTraceTags = {
       ...(parent?.traceTags ?? {}),
       ...(this._traceTags[spanTraceId] ?? {}),
@@ -227,7 +227,7 @@ export class Tracer {
     if (parent) {
       span.parentId = parent.spanId;
       span.sessionId = parent.sessionId;
-      span.sessionLookupId = parent.sessionLookupId;
+      span._sessionLookupId = parent._sessionLookupId;
       span.sessionName = parent.sessionName;
       span.traceTags = inheritedTraceTags;
       span.sessionTags = inheritedSessionTags;
@@ -240,7 +240,7 @@ export class Tracer {
       logger.debug(`Span ${name} inherits from parent ${parent.name}`);
     } else {
       const rawSessionId = opts.sessionId ?? randomUUID();
-      span.sessionLookupId = rawSessionId;
+      span._sessionLookupId = rawSessionId;
       span.sessionId = redactedSessionId.value ?? rawSessionId;
       span.sessionName = redactedSessionName.value;
       span.traceTags = inheritedTraceTags;
@@ -271,10 +271,10 @@ export class Tracer {
     this._activeTraceCounts[span.traceId] =
       (this._activeTraceCounts[span.traceId] || 0) + 1;
 
-    if (!parent && span.sessionLookupId) {
-      this._traceSessionLookupIds[span.traceId] = span.sessionLookupId;
-      this._activeSessionCounts[span.sessionLookupId] =
-        (this._activeSessionCounts[span.sessionLookupId] || 0) + 1;
+    if (!parent && span._sessionLookupId) {
+      this._traceSessionLookupIds[span.traceId] = span._sessionLookupId;
+      this._activeSessionCounts[span._sessionLookupId] =
+        (this._activeSessionCounts[span._sessionLookupId] || 0) + 1;
     }
 
     return span;
@@ -392,7 +392,7 @@ export class Tracer {
     }
 
     const rawMatchedSpans = matchingSpans.filter(
-      (span) => span.sessionLookupId === sessionId
+      (span) => span._sessionLookupId === sessionId
     );
     const publicMatchedSpans =
       rawMatchedSpans.length > 0
@@ -419,7 +419,7 @@ export class Tracer {
     if (rawMatchedSpans.length === 0) {
       const matchedSessionLookupIds = new Set(
         matchedSpans
-          .map((span) => span.sessionLookupId)
+          .map((span) => span._sessionLookupId)
           .filter((value): value is string => Boolean(value))
       );
 
@@ -433,8 +433,8 @@ export class Tracer {
 
     const sessionTagKeys = new Set<string>();
     for (const span of matchedSpans) {
-      if (span.sessionLookupId) {
-        sessionTagKeys.add(span.sessionLookupId);
+      if (span._sessionLookupId) {
+        sessionTagKeys.add(span._sessionLookupId);
       }
     }
     const redactedTags = redactTags(
@@ -514,7 +514,7 @@ export class Tracer {
       }
 
       const flushedSessionIds = new Set(
-        spansToFlush.map((s) => s.sessionLookupId).filter(Boolean)
+        spansToFlush.map((s) => s._sessionLookupId).filter(Boolean)
       );
       for (const sessionId of flushedSessionIds) {
         if (sessionId && !(sessionId in this._activeSessionCounts)) {

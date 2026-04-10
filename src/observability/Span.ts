@@ -32,7 +32,8 @@ export class Span {
   endTime?: number;
 
   sessionId?: string;
-  sessionLookupId?: string;
+  /** @internal Raw session identifier for internal lookup; not included in toJSON(). */
+  _sessionLookupId?: string;
   sessionName?: string;
 
   attributes: Record<string, unknown> = {};

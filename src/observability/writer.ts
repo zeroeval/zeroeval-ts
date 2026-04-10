@@ -155,13 +155,13 @@ export class BackendSpanWriter implements SpanWriter {
       traceIds.add(base.trace_id);
       if (base.session_id) sessionIds.add(base.session_id);
       const lookupId =
-        typeof s?.sessionLookupId === 'string' ? s.sessionLookupId : undefined;
+        typeof s?._sessionLookupId === 'string' ? s._sessionLookupId : undefined;
       if (lookupId && sessionId.value) {
         sessionLookupToRedacted.set(lookupId, sessionId.value);
       }
 
-      // Extract kind from attributes (default to 'generic')
-      const kind = base.attributes?.kind ?? 'generic';
+      // Extract kind from redacted attributes (default to 'generic')
+      const kind = mergedAttributes.kind ?? 'generic';
 
       return {
         id: base.span_id,

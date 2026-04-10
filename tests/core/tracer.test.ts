@@ -616,7 +616,7 @@ describe('Tracer', () => {
       const root = tracer.startSpan('root', { sessionId: 'session-root' });
       const child = tracer.startSpan('child');
 
-      child.sessionLookupId = 'tampered-child-session';
+      child._sessionLookupId = 'tampered-child-session';
 
       tracer.endSpan(child);
       tracer.endSpan(root);
