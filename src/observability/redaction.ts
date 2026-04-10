@@ -662,15 +662,6 @@ function redactString(
   );
   nextValue = replaceWithMetadata(
     nextValue,
-    PHONE_REGEX,
-    'PHONE',
-    (match) => redactSensitiveValueByType('PHONE', match, referenceContext),
-    (metadataRef) => {
-      metadata = mergeMetadata(metadata, metadataRef);
-    }
-  );
-  nextValue = replaceWithMetadata(
-    nextValue,
     IPV4_REGEX,
     'IP',
     (match) => redactSensitiveValueByType('IP', match, referenceContext),
@@ -683,6 +674,15 @@ function redactString(
     IPV6_REGEX,
     'IP',
     (match) => redactSensitiveValueByType('IP', match, referenceContext),
+    (metadataRef) => {
+      metadata = mergeMetadata(metadata, metadataRef);
+    }
+  );
+  nextValue = replaceWithMetadata(
+    nextValue,
+    PHONE_REGEX,
+    'PHONE',
+    (match) => redactSensitiveValueByType('PHONE', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
     }

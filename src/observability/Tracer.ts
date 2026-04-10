@@ -155,7 +155,7 @@ export class Tracer {
     return (
       traceId in this._activeTraceCounts ||
       traceId in this._traceBuckets ||
-      this._buffer.some((span) => span.traceId === traceId)
+      this._bufferedTraceIds.has(traceId)
     );
   }
 
