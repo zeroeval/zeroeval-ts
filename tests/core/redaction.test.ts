@@ -5,10 +5,6 @@ import { tracer } from '../../src/observability/Tracer';
 import { Logger } from '../../src/observability/logger';
 import { BackendSpanWriter } from '../../src/observability/writer';
 import {
-  createRedactionReferenceContext,
-  redactAttributes,
-  redactSessionIdentifier,
-  redactTags,
   resolveRedactionConfig,
 } from '../../src/observability/redaction';
 import { MockSpanWriter } from '../setup';
@@ -66,9 +62,8 @@ describe('PII redaction', () => {
     expect(json.input_data).toContain('[REDACTED_SECRET_A]');
     expect(json.output_data).toContain('[REDACTED_EMAIL_A]');
     expect(json.output_data).toContain('[REDACTED_IP_A]');
-    expect(json.error_message).toContain('[REDACTED_SECRET_B]');
-    expect(json.error_message).not.toContain('alice@example.com');
-    expect(json.error_message).not.toContain('123-45-6789');
+    expect(json.error_message).toContain('alice@example.com');
+    expect(json.error_message).toContain('123-45-6789');
     expect(json.attributes).toHaveProperty('zeroeval_redaction');
   });
 
@@ -101,15 +96,11 @@ describe('PII redaction', () => {
     void tracer.flush();
 
     const payload = mockWriter.spans[0];
-    const serialized = JSON.stringify(payload);
 
-    expect(serialized).toContain('[REDACTED_EMAIL_A]');
-    expect(serialized).toContain('[REDACTED_EMAIL_B]');
-    expect(serialized.match(/\[REDACTED_EMAIL_A\]/g)?.length).toBeGreaterThan(
-      3
-    );
-    expect(payload.attributes.email).toBe('[REDACTED_EMAIL_A]');
-    expect(payload.tags.support_email).toBe('[REDACTED_EMAIL_A]');
+    expect(payload.attributes.email).toBe(repeatedEmail);
+    expect(payload.tags.support_email).toBe(repeatedEmail);
+    expect(payload.input_data).toContain('[REDACTED_EMAIL_A]');
+    expect(payload.output_data).toContain('[REDACTED_EMAIL_A]');
     expect(payload.output_data).toContain('[REDACTED_EMAIL_B]');
   });
 
@@ -226,19 +217,14 @@ describe('PII redaction', () => {
     ]);
 
     expect(requestBodies).toHaveLength(1);
-    expect(requestBodies[0]).toContain('[REDACTED_EMAIL_A]');
-    expect(requestBodies[0]).toContain('[REDACTED_PAN_A]');
-    expect(requestBodies[0]).not.toContain('alice@example.com');
-    expect(requestBodies[0]).not.toContain('4111 1111 1111 1111');
-
-    const combinedLogs = consoleLogSpy.mock.calls
-      .flat()
-      .map((item) => String(item))
-      .join('\n');
-
-    expect(combinedLogs).toContain('[REDACTED_EMAIL_A]');
-    expect(combinedLogs).not.toContain('alice@example.com');
-    expect(combinedLogs).not.toContain('live-token');
+    const body = JSON.parse(requestBodies[0]);
+    expect(body[0].input_data).toContain('[REDACTED_EMAIL_A]');
+    expect(body[0].output_data).toContain('[REDACTED_PAN_A]');
+    expect(body[0].session_id).toBe('alice@example.com');
+    expect(body[0].session_name).toBe('Alice alice@example.com');
+    expect(body[0].attributes.authorization).toBe('Bearer live-token');
+    expect(body[0].tags.customer_email).toBe('alice@example.com');
+    expect(body[0].error_message).toBe('Cookie: secret=abc');
   });
 
   it('should preserve existing placeholders during writer fail-safe redaction', async () => {
@@ -417,90 +403,20 @@ describe('PII redaction', () => {
     expect(payload[0].output_data).toContain('[REDACTED_EMAIL_A]');
   });
 
-  it('should not inflate metadata for already-redacted sensitive-key object values', () => {
-    const config = resolveRedactionConfig({ enabled: true });
-    const referenceContext = createRedactionReferenceContext();
-    const attributes = {
-      authorization: '[REDACTED_SECRET_A]',
-    };
-
-    const redacted = redactAttributes(attributes, config, referenceContext);
-
-    expect(redacted.value).toBe(attributes);
-    expect(redacted.metadata).toBeUndefined();
-  });
-
-  it('should not count empty or missing sensitive-key values as redacted', () => {
-    const config = resolveRedactionConfig({ enabled: true });
-
-    const attributes = redactAttributes(
-      {
-        password: '',
-        apiKey: null,
-        refreshToken: undefined,
-        confirmEmail: 'alice@example.com',
-      },
-      config,
-      createRedactionReferenceContext()
-    );
-
-    expect(attributes.value).toMatchObject({
-      password: '',
-      apiKey: null,
-      refreshToken: undefined,
-      confirmEmail: '[REDACTED_EMAIL_A]',
+  it('should not redact attributes (ingestion-only policy)', () => {
+    const span = new Span('attr-no-redact', undefined, { enabled: true });
+    span.setAttributes({
+      authorization: 'Bearer live-token',
+      password: 'hunter2',
+      email: 'alice@example.com',
     });
-    expect(attributes.metadata).toEqual({
-      enabled: true,
-      count: 1,
-      types: ['EMAIL'],
+    const json = span.toJSON();
+
+    expect(json.attributes).toMatchObject({
+      authorization: 'Bearer live-token',
+      password: 'hunter2',
+      email: 'alice@example.com',
     });
-
-    const tags = redactTags(
-      {
-        authToken: '',
-        backupEmail: 'alice@example.com',
-      },
-      config,
-      createRedactionReferenceContext()
-    );
-
-    expect(tags.value).toEqual({
-      authToken: '',
-      backupEmail: '[REDACTED_EMAIL_A]',
-    });
-    expect(tags.metadata).toEqual({
-      enabled: true,
-      count: 1,
-      types: ['EMAIL'],
-    });
-  });
-
-  it('should redact camelCase and PascalCase sensitive keys by normalized key name', () => {
-    const config = resolveRedactionConfig({ enabled: true });
-    const referenceContext = createRedactionReferenceContext();
-
-    const redacted = redactAttributes(
-      {
-        accessToken: 'Bearer access-secret',
-        refreshToken: 'refresh-secret',
-        clientSecret: 'client-secret',
-        confirmEmail: 'alice@example.com',
-        userEmail: 'alice@example.com',
-        userPhone: '+1 (415) 555-1212',
-        SessionName: 'alice@example.com',
-      },
-      config,
-      referenceContext
-    );
-
-    expect(redacted.value?.accessToken).toBe('[REDACTED_SECRET_A]');
-    expect(redacted.value?.refreshToken).toBe('[REDACTED_SECRET_B]');
-    expect(redacted.value?.clientSecret).toBe('[REDACTED_SECRET_C]');
-    expect(redacted.value?.confirmEmail).toBe('[REDACTED_EMAIL_A]');
-    expect(redacted.value?.userEmail).toBe('[REDACTED_EMAIL_A]');
-    expect(redacted.value?.userPhone).toBe('[REDACTED_PHONE_A]');
-    expect(redacted.value?.SessionName).toBe('[REDACTED_EMAIL_A]');
   });
 
   it('should normalize fully-populated config objects before reuse checks', () => {
@@ -508,10 +424,6 @@ describe('PII redaction', () => {
       enabled: true,
       redactInputs: true,
       redactOutputs: true,
-      redactAttributes: true,
-      redactErrors: true,
-      redactSessionNames: true,
-      redactTagValues: true,
       sensitiveKeys: ['accessToken', 'ClientSecret'],
       customPatterns: ['secret-value'],
     });
@@ -523,24 +435,20 @@ describe('PII redaction', () => {
     expect(resolved.customPatterns[0].source).toContain('secret-value');
   });
 
-  it('should only exact-match secret and custom patterns for session identifiers', () => {
-    const config = resolveRedactionConfig({
-      enabled: true,
-      customPatterns: [/secret-token/g],
-    });
+  it('should not redact session identifiers (ingestion-only policy)', () => {
+    const mockWriter = new MockSpanWriter();
+    (tracer as any)._writer = mockWriter;
+    (tracer as any)._shuttingDown = false;
+    tracer.configure({ redaction: { enabled: true } });
 
-    expect(
-      redactSessionIdentifier('prefix Bearer shared-token', config).value
-    ).toBe('prefix Bearer shared-token');
-    expect(
-      redactSessionIdentifier('prefix secret-token suffix', config).value
-    ).toBe('prefix secret-token suffix');
-    expect(redactSessionIdentifier('Bearer shared-token', config).value).toBe(
-      '[REDACTED_SECRET]'
-    );
-    expect(redactSessionIdentifier('secret-token', config).value).toBe(
-      '[REDACTED_SECRET]'
-    );
+    const span = tracer.startSpan('session-no-redact', {
+      sessionId: 'alice@example.com',
+    });
+    tracer.endSpan(span);
+    void tracer.flush();
+
+    expect(mockWriter.spans).toHaveLength(1);
+    expect(mockWriter.spans[0].session_id).toBe('alice@example.com');
   });
 
   it('should reuse identical authorization and cookie header values and separate different ones', () => {

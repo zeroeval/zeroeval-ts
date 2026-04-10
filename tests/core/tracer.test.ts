@@ -310,19 +310,21 @@ describe('Tracer', () => {
       tracer.flush();
 
       expect(mockWriter.spans).toHaveLength(2);
-      expect(mockWriter.spans[0].session_id).toContain('[REDACTED_EMAIL_');
+      expect(mockWriter.spans[0].session_id).toBe('alice@example.com');
       expect(mockWriter.spans[0].session_id).toBe(
         mockWriter.spans[1].session_id
       );
-      expect(mockWriter.spans[0].session_name).toContain('[REDACTED_EMAIL_A]');
+      expect(mockWriter.spans[0].session_name).toBe(
+        'Alice alice@example.com'
+      );
       expect(mockWriter.spans[0].tags.customer_email).toBe(
-        '[REDACTED_EMAIL_A]'
+        'alice@example.com'
       );
       expect(mockWriter.spans[0].attributes.authorization).toBe(
-        '[REDACTED_SECRET_A]'
+        'Bearer top-secret-token'
       );
-      expect(mockWriter.spans[0].attributes.messages[0].content).toContain(
-        '[REDACTED_EMAIL_A]'
+      expect(mockWriter.spans[0].attributes.messages[0].content).toBe(
+        'Email me at alice@example.com'
       );
     });
 
@@ -343,16 +345,16 @@ describe('Tracer', () => {
       tracer.flush();
 
       expect(mockWriter.spans).toHaveLength(2);
-      expect(mockWriter.spans[0].session_id).toContain('[REDACTED_EMAIL_');
-      expect(mockWriter.spans[1].session_id).toContain('[REDACTED_EMAIL_');
+      expect(mockWriter.spans[0].session_id).toBe('alice@example.com');
+      expect(mockWriter.spans[1].session_id).toBe('alice@example.com');
       expect(mockWriter.spans[0].session_id).toBe(
         mockWriter.spans[1].session_id
       );
       expect(mockWriter.spans[0].tags.customer_email).toBe(
-        '[REDACTED_EMAIL_A]'
+        'alice@example.com'
       );
       expect(mockWriter.spans[1].tags.customer_email).toBe(
-        '[REDACTED_EMAIL_A]'
+        'alice@example.com'
       );
     });
 
@@ -365,7 +367,7 @@ describe('Tracer', () => {
 
       const span1 = tracer.startSpan('span1', { sessionId: rawSessionId });
       const publicSessionId = span1.sessionId;
-      expect(publicSessionId).toContain('[REDACTED_EMAIL_');
+      expect(publicSessionId).toBe(rawSessionId);
       tracer.endSpan(span1);
 
       tracer.addSessionTags(publicSessionId, {
@@ -378,15 +380,11 @@ describe('Tracer', () => {
       tracer.flush();
 
       expect(mockWriter.spans).toHaveLength(2);
-      expect(mockWriter.spans[0].tags.customer_email).toBe(
-        '[REDACTED_EMAIL_A]'
-      );
-      expect(mockWriter.spans[1].tags.customer_email).toBe(
-        '[REDACTED_EMAIL_A]'
-      );
+      expect(mockWriter.spans[0].tags.customer_email).toBe(rawSessionId);
+      expect(mockWriter.spans[1].tags.customer_email).toBe(rawSessionId);
     });
 
-    it('should not fan session tags out across unrelated traces for ambiguous public session identifiers', () => {
+    it('should not fan session tags out across unrelated traces with different session identifiers', () => {
       tracer.configure({
         redaction: { enabled: true },
       });
@@ -394,25 +392,28 @@ describe('Tracer', () => {
       const span1 = tracer.startSpan('trace-1', {
         sessionId: 'alice@example.com',
       });
-      const publicSessionId = span1.sessionId;
       tracer.endSpan(span1);
 
       const span2 = tracer.startSpan('trace-2', {
         sessionId: 'bob@example.com',
       });
-      expect(span2.sessionId).toBe(publicSessionId);
+      expect(span2.sessionId).toBe('bob@example.com');
       tracer.endSpan(span2);
 
-      tracer.addSessionTags(publicSessionId, {
+      tracer.addSessionTags('alice@example.com', {
         customer_email: 'alice@example.com',
       });
       tracer.flush();
 
       expect(mockWriter.spans).toHaveLength(2);
-      for (const span of mockWriter.spans) {
-        expect(span.tags.customer_email).toBeUndefined();
-        expect(span.session_tags.customer_email).toBeUndefined();
-      }
+      const aliceSpan = mockWriter.spans.find(
+        (s: any) => s.session_id === 'alice@example.com'
+      );
+      const bobSpan = mockWriter.spans.find(
+        (s: any) => s.session_id === 'bob@example.com'
+      );
+      expect(aliceSpan.tags.customer_email).toBe('alice@example.com');
+      expect(bobSpan.tags.customer_email).toBeUndefined();
     });
 
     it('should not log raw session identifiers when adding session tags with redaction enabled', () => {
@@ -435,8 +436,7 @@ describe('Tracer', () => {
         .map((item) => String(item))
         .join('\n');
 
-      expect(combinedLogs).toContain('[REDACTED_EMAIL_A]');
-      expect(combinedLogs).not.toContain('alice@example.com');
+      expect(combinedLogs).toContain('alice@example.com');
     });
 
     it('should reuse placeholders across parent and child spans in one trace', () => {
@@ -461,16 +461,18 @@ describe('Tracer', () => {
 
       expect(mockWriter.spans).toHaveLength(2);
 
-      const serializedParent = JSON.stringify(
-        mockWriter.spans.find((span: any) => span.name === 'parent')
+      const parentSpan = mockWriter.spans.find(
+        (span: any) => span.name === 'parent'
       );
-      const serializedChild = JSON.stringify(
-        mockWriter.spans.find((span: any) => span.name === 'child')
+      const childSpan = mockWriter.spans.find(
+        (span: any) => span.name === 'child'
       );
 
-      expect(serializedParent).toContain('[REDACTED_EMAIL_A]');
-      expect(serializedChild).toContain('[REDACTED_EMAIL_A]');
-      expect(serializedChild).toContain('[REDACTED_EMAIL_B]');
+      expect(parentSpan.attributes.email).toBe('seb@zeroeval.com');
+      expect(parentSpan.input_data).toContain('[REDACTED_EMAIL_A]');
+      expect(childSpan.input_data).toContain('[REDACTED_EMAIL_A]');
+      expect(childSpan.output_data).toContain('[REDACTED_EMAIL_B]');
+      expect(parentSpan.error_message).toBe('error seb@zeroeval.com');
     });
 
     it('should restart placeholder assignment for different traces', () => {
@@ -515,11 +517,11 @@ describe('Tracer', () => {
 
       expect(mockWriter.spans).toHaveLength(1);
       expect(mockWriter.spans[0].attributes.owner_email).toBe(
-        '[REDACTED_EMAIL_A]'
+        'seb@zeroeval.com'
       );
-      expect(mockWriter.spans[0].tags.support_email).toBe('[REDACTED_EMAIL_A]');
+      expect(mockWriter.spans[0].tags.support_email).toBe('seb@zeroeval.com');
       expect(mockWriter.spans[0].tags.escalation_email).toBe(
-        '[REDACTED_EMAIL_B]'
+        'other@zeroeval.com'
       );
     });
 
@@ -545,14 +547,8 @@ describe('Tracer', () => {
 
       expect(mockWriter.spans).toHaveLength(2);
       for (const span of mockWriter.spans) {
-        expect(span.trace_tags.support_email).toBe('[REDACTED_EMAIL_A]');
-        expect(span.session_tags.contact_phone).toBe('[REDACTED_PHONE_A]');
-        expect(span.attributes.zeroeval_redaction).toMatchObject({
-          enabled: true,
-        });
-        expect(span.attributes.zeroeval_redaction.types).toEqual(
-          expect.arrayContaining(['EMAIL', 'PHONE'])
-        );
+        expect(span.trace_tags.support_email).toBe('alice@example.com');
+        expect(span.session_tags.contact_phone).toBe('+1 (415) 555-1212');
       }
     });
 
@@ -573,16 +569,12 @@ describe('Tracer', () => {
       });
 
       expect(Object.keys(tracer._traceTags)).toHaveLength(1);
-      expect(Object.keys(tracer._traceTagMetadata)).toHaveLength(1);
       expect(Object.keys(tracer._sessionTags)).toHaveLength(1);
-      expect(Object.keys(tracer._sessionTagMetadata)).toHaveLength(1);
 
       await tracer.flush();
 
       expect(tracer._traceTags).toEqual({});
-      expect(tracer._traceTagMetadata).toEqual({});
       expect(tracer._sessionTags).toEqual({});
-      expect(tracer._sessionTagMetadata).toEqual({});
     });
 
     it('should ignore trace tags added after a trace has already been flushed', async () => {
@@ -604,11 +596,10 @@ describe('Tracer', () => {
       });
 
       expect(tracer._traceTags).toEqual({});
-      expect(tracer._traceTagMetadata).toEqual({});
       expect(mockWriter.spans).toHaveLength(1);
       expect(mockWriter.spans[0].tags.support_email).toBeUndefined();
       expect(mockWriter.spans[0].attributes.owner_email).toBe(
-        '[REDACTED_EMAIL_A]'
+        'seb@zeroeval.com'
       );
     });
 
@@ -623,7 +614,6 @@ describe('Tracer', () => {
 
       expect(tracer._activeSessionCounts).toEqual({});
       expect(tracer._sessionTags).toEqual({});
-      expect(tracer._sessionTagMetadata).toEqual({});
       expect(tracer._traceSessionLookupIds).toEqual({});
     });
 
@@ -637,10 +627,9 @@ describe('Tracer', () => {
       });
 
       expect(tracer._sessionTags).toEqual({});
-      expect(tracer._sessionTagMetadata).toEqual({});
     });
 
-    it('should attach metadata when sanitizeTags is used with attributes', () => {
+    it('should pass tags through unchanged from sanitizeTags (ingestion-only policy)', () => {
       tracer.configure({
         redaction: { enabled: true },
       });
@@ -652,11 +641,8 @@ describe('Tracer', () => {
         attributes
       );
 
-      expect(tags.customer_email).toBe('[REDACTED_EMAIL]');
-      expect(attributes.zeroeval_redaction).toMatchObject({
-        enabled: true,
-        types: ['EMAIL'],
-      });
+      expect(tags.customer_email).toBe('alice@example.com');
+      expect(attributes.zeroeval_redaction).toBeUndefined();
     });
   });
 

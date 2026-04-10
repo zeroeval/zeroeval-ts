@@ -2,14 +2,15 @@
 
 // Minimal manual verification example for source-side PII redaction.
 //
+// Redaction applies only to ingested payload fields (input_data, output_data).
+// Attributes, tags, session metadata, and error messages stay raw.
+//
 // Run with:
 //   npm run example:pii-redaction
 //
-// Expected markers in the printed payload:
-//   [REDACTED_EMAIL_A]
-//   [REDACTED_EMAIL_B]
-//   [REDACTED_PHONE_A]
-//   [REDACTED_SECRET_A]
+// Expected: input_data and output_data contain stable placeholders like
+//   [REDACTED_EMAIL_A], [REDACTED_PHONE_A], [REDACTED_SECRET_A]
+// while attributes.authorization, tags, session_id etc. stay unchanged.
 
 import * as ze from 'zeroeval';
 
