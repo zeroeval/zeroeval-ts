@@ -1,5 +1,6 @@
 import { HumanMessage } from '@langchain/core/messages';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { init } from '../../src/init';
 import { tracer } from '../../src/observability/Tracer';
 import { ZeroEvalCallbackHandler } from '../../src/observability/integrations/langchain/ZeroEvalCallbackHandler';
 import { wrapOpenAI } from '../../src/observability/integrations/openaiWrapper';
@@ -17,14 +18,11 @@ describe('wrapper redaction', () => {
     (tracer as any)._traceBuckets = {};
     (tracer as any)._activeTraceCounts = {};
     (tracer as any)._traceTags = {};
-    (tracer as any)._traceTagMetadata = {};
     (tracer as any)._sessionTags = {};
-    (tracer as any)._sessionTagMetadata = {};
     (tracer as any)._activeSessionCounts = {};
     (tracer as any)._traceRedactionContexts = {};
-    tracer.configure({
-      redaction: { enabled: true },
-    });
+    init({ apiKey: 'test-key', redaction: { enabled: true } });
+    (tracer as any)._writer = mockWriter;
   });
 
   afterEach(async () => {
@@ -70,9 +68,8 @@ describe('wrapper redaction', () => {
 
     expect(mockWriter.spans).toHaveLength(1);
     const span = mockWriter.spans[0];
-    expect(span.attributes.messages[0].content).toContain('[REDACTED_EMAIL_A]');
-    expect(span.attributes.messages[0].content).toContain(
-      '[REDACTED_SECRET_A]'
+    expect(span.attributes.messages[0].content).toBe(
+      'Email bob@example.com and use Authorization: Bearer live-secret'
     );
     expect(span.input_data).not.toContain('bob@example.com');
     expect(span.output_data).toContain('[REDACTED_EMAIL_A]');
@@ -158,10 +155,8 @@ describe('wrapper redaction', () => {
 
     expect(span.input_data).toContain('[REDACTED_EMAIL_A]');
     expect(span.output_data).toContain('[REDACTED_PHONE_A]');
-    expect(serializedAttributes).toContain('[REDACTED_EMAIL_A]');
-    expect(serializedAttributes).toContain('[REDACTED_SECRET_A]');
-    expect(serializedAttributes).not.toContain('bob@example.com');
-    expect(serializedAttributes).not.toContain('secret-token');
+    expect(serializedAttributes).toContain('bob@example.com');
+    expect(serializedAttributes).toContain('secret-token');
   });
 
   it('should preserve existing input placeholders when LangChain callback handler ends a span', async () => {

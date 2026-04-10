@@ -436,9 +436,19 @@ describe('PII redaction', () => {
   });
 
   it('should not redact session identifiers (ingestion-only policy)', () => {
-    const span = new Span('session-no-redact', undefined, { enabled: true });
-    const json = span.toJSON();
-    expect(json.session_id).not.toContain('[REDACTED');
+    const mockWriter = new MockSpanWriter();
+    (tracer as any)._writer = mockWriter;
+    (tracer as any)._shuttingDown = false;
+    tracer.configure({ redaction: { enabled: true } });
+
+    const span = tracer.startSpan('session-no-redact', {
+      sessionId: 'alice@example.com',
+    });
+    tracer.endSpan(span);
+    void tracer.flush();
+
+    expect(mockWriter.spans).toHaveLength(1);
+    expect(mockWriter.spans[0].session_id).toBe('alice@example.com');
   });
 
   it('should reuse identical authorization and cookie header values and separate different ones', () => {
