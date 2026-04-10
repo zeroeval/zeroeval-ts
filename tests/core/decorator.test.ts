@@ -12,11 +12,17 @@ describe('Span Decorator', () => {
     mockWriter = new MockSpanWriter();
     (tracer as any)._writer = mockWriter;
     (tracer as any)._shuttingDown = false;
+    tracer.configure({
+      redaction: { enabled: false },
+    });
   });
 
   afterEach(() => {
     // Clean up
     (tracer as any).flush();
+    tracer.configure({
+      redaction: { enabled: false },
+    });
     mockWriter.clear();
   });
 
@@ -144,6 +150,38 @@ describe('Span Decorator', () => {
       const s = mockWriter.spans[0];
       expect(s.input_data).toBe('custom input');
       expect(s.output_data).toBe('custom output');
+    });
+
+    it('should redact decorator-captured inputs and outputs when enabled', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      class TestClass {
+        @span({ name: 'redacted_method' })
+        process(payload: { email: string; authorization: string }): string {
+          return `Call +1 (415) 555-1212 for ${payload.email}`;
+        }
+      }
+
+      const instance = new TestClass();
+      const result = instance.process({
+        email: 'alice@example.com',
+        authorization: 'Bearer super-secret-token',
+      });
+
+      tracer.flush();
+
+      expect(result).toContain('alice@example.com');
+      expect(mockWriter.spans).toHaveLength(1);
+
+      const s = mockWriter.spans[0];
+      expect(s.input_data).toContain('[REDACTED_EMAIL_A]');
+      expect(s.input_data).toContain('[REDACTED_SECRET_A]');
+      expect(s.input_data).not.toContain('alice@example.com');
+      expect(s.output_data).toContain('[REDACTED_PHONE_A]');
+      expect(s.output_data).toContain('[REDACTED_EMAIL_A]');
+      expect(s.attributes.zeroeval_redaction.enabled).toBe(true);
     });
 
     it('should handle nested decorated functions', () => {

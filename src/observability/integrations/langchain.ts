@@ -77,7 +77,7 @@ export class LangChainIntegration extends Integration {
               });
               try {
                 const res = await orig.apply(this, args);
-                span.setIO(JSON.stringify(args[0]), JSON.stringify(res));
+                span.setIO(args[0], res);
                 tracer.endSpan(span);
                 return res;
               } catch (err: any) {
@@ -116,7 +116,7 @@ export class LangChainIntegration extends Integration {
               if (res?.then) {
                 return res
                   .then((r: any) => {
-                    span.setIO(JSON.stringify(args[0]), JSON.stringify(r));
+                    span.setIO(args[0], r);
                     tracer.endSpan(span);
                     return r;
                   })
@@ -130,7 +130,7 @@ export class LangChainIntegration extends Integration {
                     throw err;
                   });
               }
-              span.setIO(JSON.stringify(args[0]), JSON.stringify(res));
+              span.setIO(args[0], res);
               tracer.endSpan(span);
               return res;
             } catch (err: any) {

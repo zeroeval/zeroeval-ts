@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createTestTracer, sleep } from '../setup';
+import { Logger } from '../../src/observability/logger';
 
 describe('Tracer', () => {
   let tracer: any;
@@ -7,6 +8,11 @@ describe('Tracer', () => {
 
   beforeEach(() => {
     ({ tracer, mockWriter } = createTestTracer());
+  });
+
+  afterEach(() => {
+    Logger.setDebugMode(false);
+    vi.restoreAllMocks();
   });
 
   describe('span creation', () => {
@@ -121,6 +127,18 @@ describe('Tracer', () => {
       // Should not have any spans
       expect(mockWriter.spans).toHaveLength(0);
     });
+
+    it('should not corrupt tracer bookkeeping when spans are ended after shutdown', () => {
+      tracer.shutdown();
+
+      const span = tracer.startSpan('after-shutdown');
+      span.setIO('alice@example.com', 'ok');
+      tracer.endSpan(span);
+
+      expect(tracer._activeTraceCounts).toEqual({});
+      expect(tracer._traceBuckets).toEqual({});
+      expect(tracer._buffer).toEqual([]);
+    });
   });
 
   describe('async context management', () => {
@@ -144,7 +162,7 @@ describe('Tracer', () => {
       ];
 
       await Promise.all(promises);
-      tracer.flush();
+      await tracer.flush();
 
       expect(mockWriter.spans).toHaveLength(6); // 3 traces * 2 spans each
 
@@ -260,6 +278,386 @@ describe('Tracer', () => {
       expect(mockWriter.spans[0].tags).toEqual({ user: 'test-user' });
       expect(mockWriter.spans[1].tags).toEqual({ user: 'test-user' });
     });
+
+    it('should redact session names, sensitive tag values, and attributes', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const span1 = tracer.startSpan('root-span', {
+        sessionId: 'alice@example.com',
+        sessionName: 'Alice alice@example.com',
+        tags: {
+          customer_email: 'alice@example.com',
+        },
+        attributes: {
+          authorization: 'Bearer top-secret-token',
+          messages: [
+            {
+              role: 'user',
+              content: 'Email me at alice@example.com',
+            },
+          ],
+        },
+      });
+      tracer.endSpan(span1);
+
+      const span2 = tracer.startSpan('second-root', {
+        sessionId: 'alice@example.com',
+      });
+      tracer.endSpan(span2);
+
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(2);
+      expect(mockWriter.spans[0].session_id).toContain('[REDACTED_EMAIL_');
+      expect(mockWriter.spans[0].session_id).toBe(
+        mockWriter.spans[1].session_id
+      );
+      expect(mockWriter.spans[0].session_name).toContain('[REDACTED_EMAIL_A]');
+      expect(mockWriter.spans[0].tags.customer_email).toBe(
+        '[REDACTED_EMAIL_A]'
+      );
+      expect(mockWriter.spans[0].attributes.authorization).toBe(
+        '[REDACTED_SECRET_A]'
+      );
+      expect(mockWriter.spans[0].attributes.messages[0].content).toContain(
+        '[REDACTED_EMAIL_A]'
+      );
+    });
+
+    it('should propagate session tags using the original session identifier when redacted', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const sessionId = 'alice@example.com';
+
+      const span1 = tracer.startSpan('span1', { sessionId });
+      tracer.endSpan(span1);
+
+      const span2 = tracer.startSpan('span2', { sessionId });
+      tracer.endSpan(span2);
+
+      tracer.addSessionTags(sessionId, { customer_email: sessionId });
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(2);
+      expect(mockWriter.spans[0].session_id).toContain('[REDACTED_EMAIL_');
+      expect(mockWriter.spans[1].session_id).toContain('[REDACTED_EMAIL_');
+      expect(mockWriter.spans[0].session_id).toBe(
+        mockWriter.spans[1].session_id
+      );
+      expect(mockWriter.spans[0].tags.customer_email).toBe(
+        '[REDACTED_EMAIL_A]'
+      );
+      expect(mockWriter.spans[1].tags.customer_email).toBe(
+        '[REDACTED_EMAIL_A]'
+      );
+    });
+
+    it('should propagate session tags when called with the redacted public session identifier', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const rawSessionId = 'alice@example.com';
+
+      const span1 = tracer.startSpan('span1', { sessionId: rawSessionId });
+      const publicSessionId = span1.sessionId;
+      expect(publicSessionId).toContain('[REDACTED_EMAIL_');
+      tracer.endSpan(span1);
+
+      tracer.addSessionTags(publicSessionId, {
+        customer_email: rawSessionId,
+      });
+
+      const span2 = tracer.startSpan('span2', { sessionId: rawSessionId });
+      tracer.endSpan(span2);
+
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(2);
+      expect(mockWriter.spans[0].tags.customer_email).toBe(
+        '[REDACTED_EMAIL_A]'
+      );
+      expect(mockWriter.spans[1].tags.customer_email).toBe(
+        '[REDACTED_EMAIL_A]'
+      );
+    });
+
+    it('should not fan session tags out across unrelated traces for ambiguous public session identifiers', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const span1 = tracer.startSpan('trace-1', {
+        sessionId: 'alice@example.com',
+      });
+      const publicSessionId = span1.sessionId;
+      tracer.endSpan(span1);
+
+      const span2 = tracer.startSpan('trace-2', {
+        sessionId: 'bob@example.com',
+      });
+      expect(span2.sessionId).toBe(publicSessionId);
+      tracer.endSpan(span2);
+
+      tracer.addSessionTags(publicSessionId, {
+        customer_email: 'alice@example.com',
+      });
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(2);
+      for (const span of mockWriter.spans) {
+        expect(span.tags.customer_email).toBeUndefined();
+        expect(span.session_tags.customer_email).toBeUndefined();
+      }
+    });
+
+    it('should not log raw session identifiers when adding session tags with redaction enabled', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+      Logger.setDebugMode(true);
+      const consoleLogSpy = vi
+        .spyOn(console, 'log')
+        .mockImplementation(() => {});
+      const sessionId = 'alice@example.com';
+
+      const span = tracer.startSpan('span1', { sessionId });
+      tracer.endSpan(span);
+
+      tracer.addSessionTags(sessionId, { customer_email: sessionId });
+
+      const combinedLogs = consoleLogSpy.mock.calls
+        .flat()
+        .map((item) => String(item))
+        .join('\n');
+
+      expect(combinedLogs).toContain('[REDACTED_EMAIL_A]');
+      expect(combinedLogs).not.toContain('alice@example.com');
+    });
+
+    it('should reuse placeholders across parent and child spans in one trace', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const parent = tracer.startSpan('parent', {
+        attributes: {
+          email: 'seb@zeroeval.com',
+        },
+      });
+      parent.setIO('parent seb@zeroeval.com', undefined);
+
+      const child = tracer.startSpan('child');
+      child.setIO('child seb@zeroeval.com', 'other alt@example.com');
+      tracer.endSpan(child);
+
+      parent.setError({ message: 'error seb@zeroeval.com' });
+      tracer.endSpan(parent);
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(2);
+
+      const serializedParent = JSON.stringify(
+        mockWriter.spans.find((span: any) => span.name === 'parent')
+      );
+      const serializedChild = JSON.stringify(
+        mockWriter.spans.find((span: any) => span.name === 'child')
+      );
+
+      expect(serializedParent).toContain('[REDACTED_EMAIL_A]');
+      expect(serializedChild).toContain('[REDACTED_EMAIL_A]');
+      expect(serializedChild).toContain('[REDACTED_EMAIL_B]');
+    });
+
+    it('should restart placeholder assignment for different traces', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const trace1 = tracer.startSpan('trace1');
+      trace1.setIO('seb@zeroeval.com', undefined);
+      tracer.endSpan(trace1);
+
+      const trace2 = tracer.startSpan('trace2');
+      trace2.setIO('seb@zeroeval.com', undefined);
+      tracer.endSpan(trace2);
+
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(2);
+      expect(mockWriter.spans[0].input_data).toContain('[REDACTED_EMAIL_A]');
+      expect(mockWriter.spans[1].input_data).toContain('[REDACTED_EMAIL_A]');
+    });
+
+    it('should preserve trace redaction context for trace tags added after trace completion but before flush', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const span = tracer.startSpan('completed-trace', {
+        attributes: {
+          owner_email: 'seb@zeroeval.com',
+        },
+      });
+      span.setIO('contact seb@zeroeval.com', undefined);
+      tracer.endSpan(span);
+
+      tracer.addTraceTags(span.traceId, {
+        support_email: 'seb@zeroeval.com',
+        escalation_email: 'other@zeroeval.com',
+      });
+
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(1);
+      expect(mockWriter.spans[0].attributes.owner_email).toBe(
+        '[REDACTED_EMAIL_A]'
+      );
+      expect(mockWriter.spans[0].tags.support_email).toBe('[REDACTED_EMAIL_A]');
+      expect(mockWriter.spans[0].tags.escalation_email).toBe(
+        '[REDACTED_EMAIL_B]'
+      );
+    });
+
+    it('should preserve redaction metadata for tags added after span creation', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const sessionId = 'alice@example.com';
+      const root = tracer.startSpan('root', { sessionId });
+      const child = tracer.startSpan('child');
+
+      tracer.addTraceTags(root.traceId, {
+        support_email: 'alice@example.com',
+      });
+      tracer.addSessionTags(sessionId, {
+        contact_phone: '+1 (415) 555-1212',
+      });
+
+      tracer.endSpan(child);
+      tracer.endSpan(root);
+      tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(2);
+      for (const span of mockWriter.spans) {
+        expect(span.trace_tags.support_email).toBe('[REDACTED_EMAIL_A]');
+        expect(span.session_tags.contact_phone).toBe('[REDACTED_PHONE_A]');
+        expect(span.attributes.zeroeval_redaction).toMatchObject({
+          enabled: true,
+        });
+        expect(span.attributes.zeroeval_redaction.types).toEqual(
+          expect.arrayContaining(['EMAIL', 'PHONE'])
+        );
+      }
+    });
+
+    it('should clean up trace and session tag bookkeeping after flush', async () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const sessionId = 'alice@example.com';
+      const span = tracer.startSpan('cleanup-span', { sessionId });
+      tracer.endSpan(span);
+
+      tracer.addTraceTags(span.traceId, {
+        support_email: 'alice@example.com',
+      });
+      tracer.addSessionTags(span.sessionId, {
+        contact_phone: '+1 (415) 555-1212',
+      });
+
+      expect(Object.keys(tracer._traceTags)).toHaveLength(1);
+      expect(Object.keys(tracer._traceTagMetadata)).toHaveLength(1);
+      expect(Object.keys(tracer._sessionTags)).toHaveLength(1);
+      expect(Object.keys(tracer._sessionTagMetadata)).toHaveLength(1);
+
+      await tracer.flush();
+
+      expect(tracer._traceTags).toEqual({});
+      expect(tracer._traceTagMetadata).toEqual({});
+      expect(tracer._sessionTags).toEqual({});
+      expect(tracer._sessionTagMetadata).toEqual({});
+    });
+
+    it('should ignore trace tags added after a trace has already been flushed', async () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const span = tracer.startSpan('flushed-trace', {
+        attributes: {
+          owner_email: 'seb@zeroeval.com',
+        },
+      });
+      tracer.endSpan(span);
+
+      await tracer.flush();
+
+      tracer.addTraceTags(span.traceId, {
+        support_email: 'seb@zeroeval.com',
+      });
+
+      expect(tracer._traceTags).toEqual({});
+      expect(tracer._traceTagMetadata).toEqual({});
+      expect(mockWriter.spans).toHaveLength(1);
+      expect(mockWriter.spans[0].tags.support_email).toBeUndefined();
+      expect(mockWriter.spans[0].attributes.owner_email).toBe(
+        '[REDACTED_EMAIL_A]'
+      );
+    });
+
+    it('should decrement session counts using the root session lookup key for the trace', () => {
+      const root = tracer.startSpan('root', { sessionId: 'session-root' });
+      const child = tracer.startSpan('child');
+
+      child._sessionLookupId = 'tampered-child-session';
+
+      tracer.endSpan(child);
+      tracer.endSpan(root);
+
+      expect(tracer._activeSessionCounts).toEqual({});
+      expect(tracer._sessionTags).toEqual({});
+      expect(tracer._sessionTagMetadata).toEqual({});
+      expect(tracer._traceSessionLookupIds).toEqual({});
+    });
+
+    it('should not retain session tag buckets when no active or buffered spans match', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      tracer.addSessionTags('orphan@example.com', {
+        customer_email: 'orphan@example.com',
+      });
+
+      expect(tracer._sessionTags).toEqual({});
+      expect(tracer._sessionTagMetadata).toEqual({});
+    });
+
+    it('should attach metadata when sanitizeTags is used with attributes', () => {
+      tracer.configure({
+        redaction: { enabled: true },
+      });
+
+      const attributes: Record<string, unknown> = {};
+      const tags = tracer.sanitizeTags(
+        { customer_email: 'alice@example.com' },
+        undefined,
+        attributes
+      );
+
+      expect(tags.customer_email).toBe('[REDACTED_EMAIL]');
+      expect(attributes.zeroeval_redaction).toMatchObject({
+        enabled: true,
+        types: ['EMAIL'],
+      });
+    });
   });
 
   describe('error handling', () => {
@@ -292,8 +690,7 @@ describe('Tracer', () => {
       const span = tracer.startSpan('test');
       tracer.endSpan(span);
 
-      // Should not throw
-      expect(() => tracer.flush()).not.toThrow();
+      await expect(tracer.flush()).rejects.toThrow('Write failed');
     });
   });
 
@@ -316,7 +713,7 @@ describe('Tracer', () => {
   });
 
   describe('trace ordering', () => {
-    it('should order spans with parents before children', () => {
+    it('should order spans with parents before children', async () => {
       // Create spans in reverse order
       const child2 = tracer.startSpan('child2');
       const child1 = tracer.startSpan('child1');
@@ -331,7 +728,7 @@ describe('Tracer', () => {
       const root = tracer.startSpan('root');
       tracer.endSpan(root);
 
-      tracer.flush();
+      await tracer.flush();
 
       // Root should come first in the buffer
       const rootIndex = mockWriter.spans.findIndex(
@@ -355,7 +752,7 @@ describe('Tracer', () => {
   });
 
   describe('isActiveTrace', () => {
-    it('should correctly identify active traces', () => {
+    it('should correctly identify active traces', async () => {
       const span1 = tracer.startSpan('span1');
       const traceId = span1.traceId;
 
@@ -367,7 +764,7 @@ describe('Tracer', () => {
       // Trace should still be active until flushed
       expect(tracer.isActiveTrace(traceId)).toBe(true);
 
-      tracer.flush();
+      await tracer.flush();
 
       // After flush, trace should not be active
       expect(tracer.isActiveTrace(traceId)).toBe(false);

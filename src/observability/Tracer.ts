@@ -9,6 +9,22 @@ import { setInterval } from 'timers';
 import { discoverIntegrations } from './integrations/utils';
 import type { Integration } from './integrations/base';
 import { getLogger, Logger } from './logger';
+import {
+  attachRedactionMetadata,
+  createRedactionReferenceContext,
+  mergeMetadata,
+  redactAttributes,
+  redactSessionIdentifier,
+  redactSessionName,
+  redactTags,
+  resolveRedactionConfig,
+} from './redaction';
+import type {
+  RedactionConfig,
+  RedactionMetadata,
+  RedactionReferenceContext,
+  ResolvedRedactionConfig,
+} from './redaction';
 
 // Check for debug mode early
 if (process.env.ZEROEVAL_DEBUG?.toLowerCase() === 'true') {
@@ -22,6 +38,7 @@ interface ConfigureOptions {
   maxSpans?: number;
   collectCodeDetails?: boolean;
   integrations?: Record<string, boolean>;
+  redaction?: Partial<RedactionConfig>;
 }
 
 /** Global AsyncLocalStorage for span stacks */
@@ -36,9 +53,20 @@ export class Tracer {
 
   private _activeTraceCounts: Record<string, number> = {};
   private _traceBuckets: Record<string, Span[]> = {};
+  private _traceSessionLookupIds: Record<string, string | undefined> = {};
+  private _traceTags: Record<string, Record<string, string>> = {};
+  private _traceTagMetadata: Record<string, RedactionMetadata | undefined> = {};
+  private _sessionTags: Record<string, Record<string, string>> = {};
+  private _sessionTagMetadata: Record<string, RedactionMetadata | undefined> =
+    {};
+  private _activeSessionCounts: Record<string, number> = {};
+  private _traceRedactionContexts: Record<string, RedactionReferenceContext> =
+    {};
+  private _bufferedTraceIds = new Set<string>();
 
   private _integrations: Record<string, Integration> = {};
   private _shuttingDown = false;
+  private _redaction: ResolvedRedactionConfig = resolveRedactionConfig();
 
   constructor() {
     logger.debug('Initializing tracer...');
@@ -82,6 +110,12 @@ export class Tracer {
       this._maxSpans = opts.maxSpans;
       logger.info(`Tracer max_spans configured to ${opts.maxSpans}.`);
     }
+    if (opts.redaction !== undefined) {
+      this._redaction = resolveRedactionConfig(opts.redaction);
+      if (this._writer instanceof BackendSpanWriter) {
+        this._writer.setRedactionConfig(this._redaction);
+      }
+    }
     logger.debug(`Tracer configuration updated:`, opts);
   }
 
@@ -89,6 +123,40 @@ export class Tracer {
   currentSpan(): Span | undefined {
     const stack = als.getStore();
     return stack && stack[stack.length - 1];
+  }
+
+  private applyTraceTagsToSpan(
+    span: Span,
+    tags?: Record<string, string>,
+    metadata?: RedactionMetadata
+  ): void {
+    if (!tags) {
+      return;
+    }
+    Object.assign(span.traceTags, tags);
+    Object.assign(span.tags, tags);
+    attachRedactionMetadata(span.attributes, metadata);
+  }
+
+  private applySessionTagsToSpan(
+    span: Span,
+    tags?: Record<string, string>,
+    metadata?: RedactionMetadata
+  ): void {
+    if (!tags) {
+      return;
+    }
+    Object.assign(span.sessionTags, tags);
+    Object.assign(span.tags, tags);
+    attachRedactionMetadata(span.attributes, metadata);
+  }
+
+  private hasMutableTraceState(traceId: string): boolean {
+    return (
+      traceId in this._activeTraceCounts ||
+      traceId in this._traceBuckets ||
+      this._bufferedTraceIds.has(traceId)
+    );
   }
 
   /* TRACING ---------------------------------------------------------------*/
@@ -101,28 +169,99 @@ export class Tracer {
       tags?: Record<string, string>;
     } = {}
   ): Span {
+    if (this._shuttingDown) {
+      const span = new Span(
+        name,
+        undefined,
+        this._redaction,
+        createRedactionReferenceContext()
+      );
+      span.end();
+      return span;
+    }
+
     logger.debug(`Starting span: ${name}`);
 
     const parent = this.currentSpan();
-    const span = new Span(name, parent?.traceId);
+    const spanTraceId = parent?.traceId ?? randomUUID();
+    const referenceContext =
+      parent?.getRedactionReferenceContext() ??
+      this._traceRedactionContexts[spanTraceId] ??
+      createRedactionReferenceContext();
+    this._traceRedactionContexts[spanTraceId] = referenceContext;
+    const span = new Span(name, spanTraceId, this._redaction, referenceContext);
+    const redactedAttributes = redactAttributes(
+      opts.attributes,
+      this._redaction,
+      referenceContext
+    );
+    const redactedTags = redactTags(
+      opts.tags,
+      this._redaction,
+      referenceContext
+    );
+    const redactedSessionName = redactSessionName(
+      opts.sessionName,
+      this._redaction,
+      referenceContext
+    );
+    const redactedSessionId = redactSessionIdentifier(
+      opts.sessionId,
+      this._redaction,
+      referenceContext
+    );
+    const sessionTagLookupId = parent?._sessionLookupId ?? opts.sessionId;
+    const inheritedTraceTags = {
+      ...(parent?.traceTags ?? {}),
+      ...(this._traceTags[spanTraceId] ?? {}),
+    };
+    const inheritedTraceTagMetadata = this._traceTagMetadata[spanTraceId];
+    const inheritedSessionTags = {
+      ...(parent?.sessionTags ?? {}),
+      ...((sessionTagLookupId && this._sessionTags[sessionTagLookupId]) ?? {}),
+    };
+    const inheritedSessionTagMetadata = sessionTagLookupId
+      ? this._sessionTagMetadata[sessionTagLookupId]
+      : undefined;
 
     if (parent) {
       span.parentId = parent.spanId;
       span.sessionId = parent.sessionId;
+      span._sessionLookupId = parent._sessionLookupId;
       span.sessionName = parent.sessionName;
-      // inherit tags
-      span.tags = { ...parent.tags, ...opts.tags };
+      span.traceTags = inheritedTraceTags;
+      span.sessionTags = inheritedSessionTags;
+      span.tags = {
+        ...parent.tags,
+        ...span.traceTags,
+        ...span.sessionTags,
+        ...(redactedTags.value ?? {}),
+      };
       logger.debug(`Span ${name} inherits from parent ${parent.name}`);
     } else {
-      span.sessionId = opts.sessionId ?? randomUUID();
-      span.sessionName = opts.sessionName;
-      span.tags = { ...opts.tags };
+      const rawSessionId = opts.sessionId ?? randomUUID();
+      span._sessionLookupId = rawSessionId;
+      span.sessionId = redactedSessionId.value ?? rawSessionId;
+      span.sessionName = redactedSessionName.value;
+      span.traceTags = inheritedTraceTags;
+      span.sessionTags = inheritedSessionTags;
+      span.tags = {
+        ...span.traceTags,
+        ...span.sessionTags,
+        ...(redactedTags.value ?? {}),
+      };
       logger.debug(
         `Span ${name} is a root span with session ${span.sessionId}`
       );
     }
 
-    Object.assign(span.attributes, opts.attributes);
+    Object.assign(span.attributes, redactedAttributes.value);
+    attachRedactionMetadata(span.attributes, inheritedTraceTagMetadata);
+    attachRedactionMetadata(span.attributes, inheritedSessionTagMetadata);
+    attachRedactionMetadata(span.attributes, redactedAttributes.metadata);
+    attachRedactionMetadata(span.attributes, redactedTags.metadata);
+    attachRedactionMetadata(span.attributes, redactedSessionName.metadata);
+    attachRedactionMetadata(span.attributes, redactedSessionId.metadata);
 
     // push onto ALS stack
     const parentStack = als.getStore() ?? [];
@@ -131,6 +270,12 @@ export class Tracer {
     // trace bookkeeping
     this._activeTraceCounts[span.traceId] =
       (this._activeTraceCounts[span.traceId] || 0) + 1;
+
+    if (!parent && span._sessionLookupId) {
+      this._traceSessionLookupIds[span.traceId] = span._sessionLookupId;
+      this._activeSessionCounts[span._sessionLookupId] =
+        (this._activeSessionCounts[span._sessionLookupId] || 0) + 1;
+    }
 
     return span;
   }
@@ -146,6 +291,10 @@ export class Tracer {
       stack.pop();
     }
 
+    if (!(span.traceId in this._activeTraceCounts)) {
+      return;
+    }
+
     // bucket by trace until root finished
     const traceBucket = (this._traceBuckets[span.traceId] ||= []);
     traceBucket.push(span);
@@ -157,6 +306,16 @@ export class Tracer {
       const ordered = traceBucket.sort((a) => (a.parentId ? 1 : -1));
       delete this._traceBuckets[span.traceId];
       this._buffer.push(...ordered);
+      this._bufferedTraceIds.add(span.traceId);
+
+      const traceSessionLookupId = this._traceSessionLookupIds[span.traceId];
+      delete this._traceSessionLookupIds[span.traceId];
+      if (traceSessionLookupId) {
+        this._activeSessionCounts[traceSessionLookupId] -= 1;
+        if (this._activeSessionCounts[traceSessionLookupId] === 0) {
+          delete this._activeSessionCounts[traceSessionLookupId];
+        }
+      }
 
       logger.debug(
         `Trace ${span.traceId} complete with ${ordered.length} spans`
@@ -176,28 +335,156 @@ export class Tracer {
 
   /* TAG HELPERS -----------------------------------------------------------*/
   addTraceTags(traceId: string, tags: Record<string, string>): void {
-    logger.debug(`Adding trace tags to ${traceId}:`, tags);
+    if (!this.hasMutableTraceState(traceId)) {
+      logger.debug(
+        `Skipping trace tags for ${traceId}; no active or buffered spans matched`
+      );
+      return;
+    }
+
+    const redactedTags = redactTags(
+      tags,
+      this._redaction,
+      this._traceRedactionContexts[traceId]
+    );
+    logger.debug(`Adding trace tags to ${traceId}:`, redactedTags.value);
+    this._traceTags[traceId] = {
+      ...(this._traceTags[traceId] ?? {}),
+      ...(redactedTags.value ?? {}),
+    };
+    this._traceTagMetadata[traceId] = mergeMetadata(
+      this._traceTagMetadata[traceId],
+      redactedTags.metadata
+    );
 
     // update buckets
-    for (const span of this._traceBuckets[traceId] ?? [])
-      Object.assign(span.tags, tags);
+    for (const span of this._traceBuckets[traceId] ?? []) {
+      this.applyTraceTagsToSpan(
+        span,
+        redactedTags.value,
+        redactedTags.metadata
+      );
+    }
+    for (const span of als.getStore() ?? []) {
+      if (span.traceId === traceId) {
+        this.applyTraceTagsToSpan(
+          span,
+          redactedTags.value,
+          redactedTags.metadata
+        );
+      }
+    }
     // update buffer if spans already flushed there
     this._buffer
       .filter((s) => s.traceId === traceId)
-      .forEach((s) => Object.assign(s.tags, tags));
+      .forEach((s) =>
+        this.applyTraceTagsToSpan(s, redactedTags.value, redactedTags.metadata)
+      );
   }
 
   addSessionTags(sessionId: string, tags: Record<string, string>): void {
-    logger.debug(`Adding session tags to ${sessionId}:`, tags);
+    const matchingSpans = [
+      ...Object.values(this._traceBuckets).flat(),
+      ...this._buffer,
+    ];
+    for (const span of als.getStore() ?? []) {
+      matchingSpans.push(span);
+    }
 
-    const all = [...Object.values(this._traceBuckets).flat(), ...this._buffer];
-    all
-      .filter((s) => s.sessionId === sessionId)
-      .forEach((s) => Object.assign(s.tags, tags));
+    const rawMatchedSpans = matchingSpans.filter(
+      (span) => span._sessionLookupId === sessionId
+    );
+    const publicMatchedSpans =
+      rawMatchedSpans.length > 0
+        ? rawMatchedSpans
+        : matchingSpans.filter((span) => span.sessionId === sessionId);
+    const matchedSpan = publicMatchedSpans[0];
+    const logSessionId =
+      matchedSpan?.sessionId ??
+      redactSessionIdentifier(
+        sessionId,
+        this._redaction,
+        matchedSpan?.getRedactionReferenceContext()
+      ).value ??
+      '[session]';
+
+    if (publicMatchedSpans.length === 0) {
+      logger.debug(
+        `Skipping session tags for ${logSessionId}; no active or buffered spans matched`
+      );
+      return;
+    }
+
+    let matchedSpans = publicMatchedSpans;
+    if (rawMatchedSpans.length === 0) {
+      const matchedSessionLookupIds = new Set(
+        matchedSpans
+          .map((span) => span._sessionLookupId)
+          .filter((value): value is string => Boolean(value))
+      );
+
+      if (matchedSessionLookupIds.size !== 1) {
+        logger.debug(
+          `Skipping session tags for ${logSessionId}; public session identifier matched multiple traces or session buckets`
+        );
+        return;
+      }
+    }
+
+    const sessionTagKeys = new Set<string>();
+    for (const span of matchedSpans) {
+      if (span._sessionLookupId) {
+        sessionTagKeys.add(span._sessionLookupId);
+      }
+    }
+    const redactedTags = redactTags(
+      tags,
+      this._redaction,
+      matchedSpan?.getRedactionReferenceContext()
+    );
+    logger.debug(`Adding session tags to ${logSessionId}:`, redactedTags.value);
+    for (const sessionTagKey of sessionTagKeys) {
+      this._sessionTags[sessionTagKey] = {
+        ...(this._sessionTags[sessionTagKey] ?? {}),
+        ...(redactedTags.value ?? {}),
+      };
+      this._sessionTagMetadata[sessionTagKey] = mergeMetadata(
+        this._sessionTagMetadata[sessionTagKey],
+        redactedTags.metadata
+      );
+    }
+
+    matchedSpans.forEach((span) =>
+      this.applySessionTagsToSpan(
+        span,
+        redactedTags.value,
+        redactedTags.metadata
+      )
+    );
   }
 
   isActiveTrace(traceId: string): boolean {
-    return traceId in this._activeTraceCounts || traceId in this._traceBuckets;
+    return (
+      traceId in this._activeTraceCounts ||
+      traceId in this._traceBuckets ||
+      this._bufferedTraceIds.has(traceId)
+    );
+  }
+
+  sanitizeTags(
+    tags: Record<string, string>,
+    traceId?: string,
+    attributes?: Record<string, unknown>
+  ): Record<string, string> {
+    const redacted = redactTags(
+      tags,
+      this._redaction,
+      traceId ? this._traceRedactionContexts[traceId] : undefined
+    );
+    if (attributes) {
+      attachRedactionMetadata(attributes, redacted.metadata);
+    }
+    return redacted.value ?? tags;
   }
 
   /* FLUSH -----------------------------------------------------------------*/
@@ -209,11 +496,32 @@ export class Tracer {
 
     this._lastFlush = Date.now();
     const spansToFlush = this._buffer.splice(0);
+    const flushedTraceIds = new Set(spansToFlush.map((span) => span.traceId));
 
     try {
       const startTime = Date.now();
       await this._writer.write(spansToFlush);
       const duration = Date.now() - startTime;
+
+      for (const traceId of flushedTraceIds) {
+        this._bufferedTraceIds.delete(traceId);
+        delete this._traceRedactionContexts[traceId];
+        delete this._traceSessionLookupIds[traceId];
+        if (!(traceId in this._activeTraceCounts)) {
+          delete this._traceTags[traceId];
+          delete this._traceTagMetadata[traceId];
+        }
+      }
+
+      const flushedSessionIds = new Set(
+        spansToFlush.map((s) => s._sessionLookupId).filter(Boolean)
+      );
+      for (const sessionId of flushedSessionIds) {
+        if (sessionId && !(sessionId in this._activeSessionCounts)) {
+          delete this._sessionTags[sessionId];
+          delete this._sessionTagMetadata[sessionId];
+        }
+      }
 
       logger.info(
         `[ZeroEval] Successfully flushed ${spanCount} spans in ${duration}ms`
@@ -232,7 +540,7 @@ export class Tracer {
   private async _setupAvailableIntegrations(): Promise<void> {
     logger.info('Checking for available integrations...');
 
-    const available = await discoverIntegrations();
+    const available = (await discoverIntegrations()) ?? {};
 
     for (const [key, Ctor] of Object.entries(available)) {
       try {

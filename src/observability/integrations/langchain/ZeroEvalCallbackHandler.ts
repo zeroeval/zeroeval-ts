@@ -50,25 +50,6 @@ class ObjectPool<T> {
   }
 }
 
-class LazySerializer {
-  private value: unknown;
-  private serialized?: string;
-
-  constructor(value: unknown) {
-    this.value = value;
-  }
-
-  toString(): string {
-    if (!this.serialized) {
-      this.serialized =
-        typeof this.value === 'string'
-          ? this.value
-          : JSON.stringify(this.value);
-    }
-    return this.serialized;
-  }
-}
-
 export class ZeroEvalCallbackHandler
   extends BaseCallbackHandler
   implements BaseCallbackHandlerInput
@@ -214,8 +195,7 @@ export class ZeroEvalCallbackHandler
     });
 
     if (input !== undefined) {
-      const lazyInput = new LazySerializer(input);
-      span.setIO(lazyInput.toString(), undefined);
+      span.setIO(input, undefined);
     }
 
     this.spans.set(runId, span);
@@ -251,8 +231,7 @@ export class ZeroEvalCallbackHandler
     }
 
     if (output !== undefined) {
-      const lazyOutput = new LazySerializer(output);
-      span.setIO(span.inputData, lazyOutput.toString());
+      span.setIO(undefined, output);
     }
 
     if (error) {
@@ -271,7 +250,7 @@ export class ZeroEvalCallbackHandler
         }
       }
 
-      Object.assign(span.attributes, additionalAttrs);
+      span.setAttributes(additionalAttrs);
       this.metadataPool.release(additionalAttrs);
     }
 

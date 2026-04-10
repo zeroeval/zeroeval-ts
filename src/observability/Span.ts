@@ -1,5 +1,20 @@
 import { randomUUID } from 'crypto';
 import type { Signal } from './signals';
+import {
+  attachRedactionMetadata,
+  createRedactionReferenceContext,
+  redactAttributes,
+  redactErrorInfo,
+  redactInputValue,
+  redactOutputValue,
+  resolveRedactionConfig,
+  safeSerialize,
+} from './redaction';
+import type {
+  RedactionConfig,
+  RedactionReferenceContext,
+  ResolvedRedactionConfig,
+} from './redaction';
 
 export interface ErrorInfo {
   code?: string;
@@ -17,6 +32,8 @@ export class Span {
   endTime?: number;
 
   sessionId?: string;
+  /** @internal Raw session identifier for internal lookup; not included in toJSON(). */
+  _sessionLookupId?: string;
   sessionName?: string;
 
   attributes: Record<string, unknown> = {};
@@ -30,10 +47,23 @@ export class Span {
 
   error?: ErrorInfo;
   status: 'ok' | 'error' = 'ok';
+  private readonly redactionConfig: ResolvedRedactionConfig;
+  private readonly redactionReferenceContext?: RedactionReferenceContext;
 
-  constructor(name: string, traceId?: string) {
+  constructor(
+    name: string,
+    traceId?: string,
+    redactionConfig?: Partial<RedactionConfig>,
+    redactionReferenceContext?: RedactionReferenceContext
+  ) {
     this.name = name;
     this.traceId = traceId ?? randomUUID();
+    this.redactionConfig = resolveRedactionConfig(redactionConfig);
+    this.redactionReferenceContext =
+      redactionReferenceContext ??
+      (this.redactionConfig.enabled
+        ? createRedactionReferenceContext()
+        : undefined);
   }
 
   end(): void {
@@ -45,19 +75,53 @@ export class Span {
   }
 
   setError(info: ErrorInfo): void {
-    this.error = info;
+    const redacted = redactErrorInfo(
+      info,
+      this.redactionConfig,
+      this.redactionReferenceContext
+    );
+    this.error = redacted.value;
+    attachRedactionMetadata(this.attributes, redacted.metadata);
     this.status = 'error';
   }
 
   setIO(input?: unknown, output?: unknown): void {
     if (input !== undefined) {
+      const redacted = redactInputValue(
+        input,
+        this.redactionConfig,
+        this.redactionReferenceContext
+      );
       this.inputData =
-        typeof input === 'string' ? input : JSON.stringify(input);
+        typeof redacted.value === 'string'
+          ? redacted.value
+          : safeSerialize(redacted.value);
+      attachRedactionMetadata(this.attributes, redacted.metadata);
     }
     if (output !== undefined) {
+      const redacted = redactOutputValue(
+        output,
+        this.redactionConfig,
+        this.redactionReferenceContext
+      );
       this.outputData =
-        typeof output === 'string' ? output : JSON.stringify(output);
+        typeof redacted.value === 'string'
+          ? redacted.value
+          : safeSerialize(redacted.value);
+      attachRedactionMetadata(this.attributes, redacted.metadata);
     }
+  }
+
+  setAttributes(attrs: Record<string, unknown>): void {
+    const redacted = redactAttributes(
+      attrs,
+      this.redactionConfig,
+      this.redactionReferenceContext
+    );
+    if (redacted.value) {
+      Object.assign(this.attributes, redacted.value);
+    }
+    attachRedactionMetadata(this.attributes, redacted.metadata);
   }
 
   addSignal(
@@ -89,6 +153,10 @@ export class Span {
       value,
       type: signalType,
     };
+  }
+
+  getRedactionReferenceContext(): RedactionReferenceContext | undefined {
+    return this.redactionReferenceContext;
   }
 
   toJSON(): Record<string, unknown> {
