@@ -572,8 +572,7 @@ function redactString(
     },
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    },
-    referenceContext
+    }
   );
   nextValue = replaceWithMetadata(
     nextValue,
@@ -587,8 +586,7 @@ function redactString(
       )}`,
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    },
-    referenceContext
+    }
   );
   nextValue = replaceWithMetadata(
     nextValue,
@@ -602,8 +600,7 @@ function redactString(
       )}`,
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    },
-    referenceContext
+    }
   );
   nextValue = replaceWithMetadata(
     nextValue,
@@ -612,8 +609,7 @@ function redactString(
     (match) => redactSensitiveValueByType('SECRET', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    },
-    referenceContext
+    }
   );
   nextValue = replaceWithMetadata(
     nextValue,
@@ -622,8 +618,7 @@ function redactString(
     (match) => redactSensitiveValueByType('SECRET', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    },
-    referenceContext
+    }
   );
   nextValue = replacePanCandidates(
     nextValue,
@@ -639,8 +634,7 @@ function redactString(
     (match) => redactSensitiveValueByType('SSN', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    },
-    referenceContext
+    }
   );
   nextValue = replaceWithMetadata(
     nextValue,
@@ -649,8 +643,7 @@ function redactString(
     (match) => redactSensitiveValueByType('EMAIL', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    },
-    referenceContext
+    }
   );
   nextValue = replaceWithMetadata(
     nextValue,
@@ -659,8 +652,7 @@ function redactString(
     (match) => redactSensitiveValueByType('PHONE', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    },
-    referenceContext
+    }
   );
   nextValue = replaceWithMetadata(
     nextValue,
@@ -669,8 +661,7 @@ function redactString(
     (match) => redactSensitiveValueByType('IP', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    },
-    referenceContext
+    }
   );
   nextValue = replaceWithMetadata(
     nextValue,
@@ -679,8 +670,7 @@ function redactString(
     (match) => redactSensitiveValueByType('IP', match, referenceContext),
     (metadataRef) => {
       metadata = mergeMetadata(metadata, metadataRef);
-    },
-    referenceContext
+    }
   );
 
   for (const pattern of config.customPatterns) {
@@ -691,8 +681,7 @@ function redactString(
       (match) => redactSensitiveValueByType('SECRET', match, referenceContext),
       (metadataRef) => {
         metadata = mergeMetadata(metadata, metadataRef);
-      },
-      referenceContext
+      }
     );
   }
 
@@ -728,8 +717,7 @@ function replaceWithMetadata(
   pattern: RegExp,
   type: RedactionType,
   replacement: (...args: string[]) => string,
-  onMatch: (metadata: RedactionMetadata) => void,
-  _referenceContext?: RedactionReferenceContext
+  onMatch: (metadata: RedactionMetadata) => void
 ): string {
   pattern.lastIndex = 0;
   let matchCount = 0;

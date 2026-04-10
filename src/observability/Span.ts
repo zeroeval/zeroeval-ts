@@ -3,6 +3,7 @@ import type { Signal } from './signals';
 import {
   attachRedactionMetadata,
   createRedactionReferenceContext,
+  redactAttributes,
   redactErrorInfo,
   redactInputValue,
   redactOutputValue,
@@ -108,6 +109,18 @@ export class Span {
           : safeSerialize(redacted.value);
       attachRedactionMetadata(this.attributes, redacted.metadata);
     }
+  }
+
+  setAttributes(attrs: Record<string, unknown>): void {
+    const redacted = redactAttributes(
+      attrs,
+      this.redactionConfig,
+      this.redactionReferenceContext
+    );
+    if (redacted.value) {
+      Object.assign(this.attributes, redacted.value);
+    }
+    attachRedactionMetadata(this.attributes, redacted.metadata);
   }
 
   addSignal(

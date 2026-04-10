@@ -250,7 +250,7 @@ export class ZeroEvalCallbackHandler
         }
       }
 
-      Object.assign(span.attributes, additionalAttrs);
+      span.setAttributes(additionalAttrs);
       this.metadataPool.release(additionalAttrs);
     }
 
