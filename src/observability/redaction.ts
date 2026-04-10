@@ -195,48 +195,6 @@ function redactStringValue(
   return redactString(value, config, { parseJsonStrings }, referenceContext);
 }
 
-export function redactAttributes(
-  value: Record<string, unknown> | undefined,
-  _config: ResolvedRedactionConfig,
-  _referenceContext?: RedactionReferenceContext
-): RedactionResult<Record<string, unknown> | undefined> {
-  return { value };
-}
-
-export function redactTags(
-  value: Record<string, string> | undefined,
-  _config: ResolvedRedactionConfig,
-  _referenceContext?: RedactionReferenceContext
-): RedactionResult<Record<string, string> | undefined> {
-  return { value };
-}
-
-export function redactSessionName(
-  value: string | undefined,
-  _config: ResolvedRedactionConfig,
-  _referenceContext?: RedactionReferenceContext
-): RedactionResult<string | undefined> {
-  return { value };
-}
-
-export function redactSessionIdentifier(
-  value: string | undefined,
-  _config: ResolvedRedactionConfig,
-  _referenceContext?: RedactionReferenceContext
-): RedactionResult<string | undefined> {
-  return { value };
-}
-
-export function redactErrorInfo(
-  error: { code?: string; message?: string; stack?: string } | undefined,
-  _config: ResolvedRedactionConfig,
-  _referenceContext?: RedactionReferenceContext
-): RedactionResult<
-  { code?: string; message?: string; stack?: string } | undefined
-> {
-  return { value: error };
-}
-
 export function attachRedactionMetadata(
   attributes: Record<string, unknown>,
   metadata?: RedactionMetadata
