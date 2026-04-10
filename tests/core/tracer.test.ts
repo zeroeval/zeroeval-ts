@@ -573,16 +573,12 @@ describe('Tracer', () => {
       });
 
       expect(Object.keys(tracer._traceTags)).toHaveLength(1);
-      expect(Object.keys(tracer._traceTagMetadata)).toHaveLength(1);
       expect(Object.keys(tracer._sessionTags)).toHaveLength(1);
-      expect(Object.keys(tracer._sessionTagMetadata)).toHaveLength(1);
 
       await tracer.flush();
 
       expect(tracer._traceTags).toEqual({});
-      expect(tracer._traceTagMetadata).toEqual({});
       expect(tracer._sessionTags).toEqual({});
-      expect(tracer._sessionTagMetadata).toEqual({});
     });
 
     it('should ignore trace tags added after a trace has already been flushed', async () => {
@@ -604,11 +600,10 @@ describe('Tracer', () => {
       });
 
       expect(tracer._traceTags).toEqual({});
-      expect(tracer._traceTagMetadata).toEqual({});
       expect(mockWriter.spans).toHaveLength(1);
       expect(mockWriter.spans[0].tags.support_email).toBeUndefined();
       expect(mockWriter.spans[0].attributes.owner_email).toBe(
-        '[REDACTED_EMAIL_A]'
+        'seb@zeroeval.com'
       );
     });
 
@@ -623,7 +618,6 @@ describe('Tracer', () => {
 
       expect(tracer._activeSessionCounts).toEqual({});
       expect(tracer._sessionTags).toEqual({});
-      expect(tracer._sessionTagMetadata).toEqual({});
       expect(tracer._traceSessionLookupIds).toEqual({});
     });
 
@@ -637,10 +631,9 @@ describe('Tracer', () => {
       });
 
       expect(tracer._sessionTags).toEqual({});
-      expect(tracer._sessionTagMetadata).toEqual({});
     });
 
-    it('should attach metadata when sanitizeTags is used with attributes', () => {
+    it('should pass tags through unchanged from sanitizeTags (ingestion-only policy)', () => {
       tracer.configure({
         redaction: { enabled: true },
       });
@@ -652,11 +645,8 @@ describe('Tracer', () => {
         attributes
       );
 
-      expect(tags.customer_email).toBe('[REDACTED_EMAIL]');
-      expect(attributes.zeroeval_redaction).toMatchObject({
-        enabled: true,
-        types: ['EMAIL'],
-      });
+      expect(tags.customer_email).toBe('alice@example.com');
+      expect(attributes.zeroeval_redaction).toBeUndefined();
     });
   });
 
