@@ -172,17 +172,6 @@ type ResumeSessionFn = (
 ) => SDKSession;
 
 // ---------------------------------------------------------------------------
-// Claude Agent SDK module shape
-// ---------------------------------------------------------------------------
-
-interface ClaudeAgentSdkModule {
-  query: QueryFn;
-  unstable_v2_createSession?: CreateSessionFn;
-  unstable_v2_resumeSession?: ResumeSessionFn;
-  [key: string]: unknown;
-}
-
-// ---------------------------------------------------------------------------
 // Wrapped module type
 // ---------------------------------------------------------------------------
 
@@ -627,7 +616,19 @@ function createWrappedSession(session: SDKSession): SDKSession {
     });
 
     pending.push(span, state);
-    return originalSend(message);
+    try {
+      return await originalSend(message);
+    } catch (err) {
+      pending.pop();
+      const e = err instanceof Error ? err : new Error(String(err));
+      span.setError({
+        code: e.name,
+        message: e.message,
+        stack: e.stack,
+      });
+      tracer.endSpan(span);
+      throw err;
+    }
   };
 
   const wrappedStream = function wrappedSessionStream(): AsyncGenerator<
