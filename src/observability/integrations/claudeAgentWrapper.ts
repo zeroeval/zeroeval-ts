@@ -734,7 +734,11 @@ export function wrapClaudeAgentSdk<T extends Record<string, unknown>>(
   }
 
   if (typeof sdkModule.query === 'function') {
-    wrapped.query = createWrappedQuery(sdkModule.query as QueryFn);
+    const wrappedQuery = createWrappedQuery(sdkModule.query as QueryFn);
+    (
+      wrappedQuery as unknown as { __zeroeval_wrapped: boolean }
+    ).__zeroeval_wrapped = true;
+    wrapped.query = wrappedQuery;
   }
 
   if (typeof sdkModule.unstable_v2_createSession === 'function') {
