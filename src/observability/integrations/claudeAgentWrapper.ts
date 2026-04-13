@@ -502,6 +502,21 @@ function createWrappedQuery(originalQuery: QueryFn): QueryFn {
         options: wrappedOptions as QueryParams['options'],
       });
     } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      try {
+        applyStateToSpan(span, state);
+      } catch {
+        // best-effort
+      }
+      try {
+        span.setError({
+          code: error.name,
+          message: error.message,
+          stack: error.stack,
+        });
+      } catch {
+        // best-effort
+      }
       tracer.endSpan(span);
       throw err;
     }
