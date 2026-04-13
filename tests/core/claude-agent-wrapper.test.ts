@@ -279,6 +279,26 @@ describe('Claude Agent Wrapper', () => {
       expect(span.status).toBe('error');
     });
 
+    it('should apply state and error when original query throws synchronously', async () => {
+      const fakeQuery = function fakeQuery() {
+        throw new Error('missing api key');
+      };
+
+      const wrapped = wrapClaudeAgentQuery(fakeQuery as any);
+
+      expect(() => wrapped({ prompt: 'sync prompt' })).toThrow('missing api key');
+
+      await tracer.flush();
+
+      expect(mockWriter.spans).toHaveLength(1);
+      const span = mockWriter.spans[0];
+      expect(span.status).toBe('error');
+      expect(span.error_code).toBe('Error');
+      expect(span.error_message).toBe('missing api key');
+      expect(span.input_data).toContain('sync prompt');
+      expect(span.output_data).toBe('');
+    });
+
     it('should count stream events', async () => {
       const fakeQuery = createFakeQuery([
         makeStreamEvent(),
