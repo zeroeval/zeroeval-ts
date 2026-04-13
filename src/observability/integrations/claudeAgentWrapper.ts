@@ -495,10 +495,16 @@ function createWrappedQuery(originalQuery: QueryFn): QueryFn {
       tags: { integration: 'claude_agent_sdk' },
     });
 
-    const originalGen = originalQuery({
-      ...params,
-      options: wrappedOptions as QueryParams['options'],
-    });
+    let originalGen: ReturnType<QueryFn>;
+    try {
+      originalGen = originalQuery({
+        ...params,
+        options: wrappedOptions as QueryParams['options'],
+      });
+    } catch (err) {
+      tracer.endSpan(span);
+      throw err;
+    }
 
     async function* tracedGenerator(): AsyncGenerator<SDKMessage, void> {
       let error: Error | null = null;
