@@ -223,18 +223,25 @@ class TurnState {
 // ---------------------------------------------------------------------------
 
 class PendingTurnState {
-  private turns: Array<{ span: ReturnType<typeof tracer.startSpan>; state: TurnState }> = [];
+  private turns: Array<{
+    span: ReturnType<typeof tracer.startSpan>;
+    state: TurnState;
+  }> = [];
 
   push(span: ReturnType<typeof tracer.startSpan>, state: TurnState): void {
     this.turns.push({ span, state });
   }
 
-  peek(): { span: ReturnType<typeof tracer.startSpan>; state: TurnState } | undefined {
-    return this.turns[this.turns.length - 1];
+  peek():
+    | { span: ReturnType<typeof tracer.startSpan>; state: TurnState }
+    | undefined {
+    return this.turns[0];
   }
 
-  pop(): { span: ReturnType<typeof tracer.startSpan>; state: TurnState } | undefined {
-    return this.turns.pop();
+  pop():
+    | { span: ReturnType<typeof tracer.startSpan>; state: TurnState }
+    | undefined {
+    return this.turns.shift();
   }
 
   closeAll(): void {
@@ -323,7 +330,11 @@ function extractMessageData(message: SDKMessage, state: TurnState): void {
         state.resultMeta.terminal_reason = rm.terminal_reason;
       if ('permission_denials' in rm && rm.permission_denials)
         state.resultMeta.permission_denials = rm.permission_denials;
-      if ('result' in rm && typeof rm.result === 'string' && !state.assistantText) {
+      if (
+        'result' in rm &&
+        typeof rm.result === 'string' &&
+        !state.assistantText
+      ) {
         state.assistantText = rm.result;
       }
       break;
@@ -342,7 +353,11 @@ function extractMessageData(message: SDKMessage, state: TurnState): void {
     }
 
     default:
-      if ('session_id' in msg && typeof msg.session_id === 'string' && msg.session_id) {
+      if (
+        'session_id' in msg &&
+        typeof msg.session_id === 'string' &&
+        msg.session_id
+      ) {
         state.claudeSessionId = msg.session_id;
       }
       break;
@@ -390,18 +405,19 @@ function applyStateToSpan(
 // Options wrapping (canUseTool / hooks enrichment)
 // ---------------------------------------------------------------------------
 
-function wrapCanUseTool(
-  original: CanUseTool,
-  state: TurnState
-): CanUseTool {
+function wrapCanUseTool(original: CanUseTool, state: TurnState): CanUseTool {
   return async (toolName, input, options) => {
     const result = await original(toolName, input, options);
     try {
       state.permissionDecisions.push({
         toolName,
         behavior: result?.behavior ?? 'unknown',
-        toolUseID: (options as Record<string, unknown>).toolUseID as string | undefined,
-        agentID: (options as Record<string, unknown>).agentID as string | undefined,
+        toolUseID: (options as Record<string, unknown>).toolUseID as
+          | string
+          | undefined,
+        agentID: (options as Record<string, unknown>).agentID as
+          | string
+          | undefined,
       });
     } catch {
       // best-effort
@@ -643,7 +659,9 @@ function createWrappedSession(session: SDKSession): SDKSession {
 // ---------------------------------------------------------------------------
 
 export function wrapClaudeAgentQuery<T extends QueryFn>(queryFn: T): T {
-  if ((queryFn as unknown as { __zeroeval_wrapped?: boolean }).__zeroeval_wrapped) {
+  if (
+    (queryFn as unknown as { __zeroeval_wrapped?: boolean }).__zeroeval_wrapped
+  ) {
     return queryFn;
   }
 
