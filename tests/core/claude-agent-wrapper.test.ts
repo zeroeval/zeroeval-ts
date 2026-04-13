@@ -382,6 +382,39 @@ describe('Claude Agent Wrapper', () => {
       expect(doubleWrapped).toBe(wrapped);
     });
 
+    it('should preserve Query methods on the wrapped return object', async () => {
+      const interrupt = vi.fn();
+      const setModel = vi.fn();
+      const accountInfo = vi.fn().mockResolvedValue({ account: 'ok' });
+
+      const fakeQuery = function fakeQuery() {
+        async function* gen() {
+          yield makeResultMessage();
+        }
+
+        const queryLike = gen() as any;
+        queryLike.interrupt = interrupt;
+        queryLike.setModel = setModel;
+        queryLike.accountInfo = accountInfo;
+        return queryLike;
+      };
+
+      const wrapped = wrapClaudeAgentQuery(fakeQuery as any);
+      const wrappedQuery = wrapped({ prompt: 'test' }) as any;
+
+      wrappedQuery.interrupt();
+      wrappedQuery.setModel('claude-sonnet-4-6');
+      const info = await wrappedQuery.accountInfo();
+
+      expect(interrupt).toHaveBeenCalledTimes(1);
+      expect(setModel).toHaveBeenCalledWith('claude-sonnet-4-6');
+      expect(info).toEqual({ account: 'ok' });
+
+      for await (const _ of wrappedQuery) {
+        // consume
+      }
+    });
+
     it('should wrap canUseTool and capture permission decisions', async () => {
       const permissionAllow = { behavior: 'allow' };
       const canUseTool = async () => permissionAllow;

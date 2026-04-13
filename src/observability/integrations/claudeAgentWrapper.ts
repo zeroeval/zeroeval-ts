@@ -478,6 +478,39 @@ function wrapOptions(
 // Query wrapper
 // ---------------------------------------------------------------------------
 
+function preserveQueryMethods(
+  tracedGen: AsyncGenerator<SDKMessage, void>,
+  originalGen: QueryReturn
+): QueryReturn {
+  return new Proxy(tracedGen as QueryReturn, {
+    get(target, prop, receiver) {
+      if (prop in target) {
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      }
+      const value = Reflect.get(originalGen as object, prop, originalGen);
+      return typeof value === 'function' ? value.bind(originalGen) : value;
+    },
+    has(target, prop) {
+      return prop in target || prop in originalGen;
+    },
+    ownKeys(target) {
+      return Array.from(
+        new Set([
+          ...Reflect.ownKeys(target as object),
+          ...Reflect.ownKeys(originalGen as object),
+        ])
+      );
+    },
+    getOwnPropertyDescriptor(target, prop) {
+      return (
+        Reflect.getOwnPropertyDescriptor(target as object, prop) ??
+        Reflect.getOwnPropertyDescriptor(originalGen as object, prop)
+      );
+    },
+  });
+}
+
 function createWrappedQuery(originalQuery: QueryFn): QueryFn {
   const wrappedQuery = function wrappedClaudeQuery(
     params: QueryParams
@@ -564,7 +597,7 @@ function createWrappedQuery(originalQuery: QueryFn): QueryFn {
       }
     }
 
-    return tracedGenerator() as QueryReturn;
+    return preserveQueryMethods(tracedGenerator(), originalGen);
   };
 
   return wrappedQuery;
