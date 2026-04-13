@@ -8,7 +8,7 @@ For full documentation visit https://docs.zeroeval.com.
 
 • **Span decorator & tracer API** – instrument any function with a single line and capture sessions, traces and spans easily.
 
-• **Integrations** – OpenAI client, Vercel AI SDK, and LangChain/LangGraph are traced automatically (optional peer deps).
+• **Integrations** – OpenAI client, Vercel AI SDK, Claude Agent SDK, and LangChain/LangGraph are traced automatically (optional peer deps).
 
 • **Works everywhere** – Node 18+, Bun, browser (Vite / Next.js).
 
@@ -32,6 +32,7 @@ Optional dependencies for integrations:
 npm install openai
 npm install ai @ai-sdk/openai
 npm install langchain
+npm install @anthropic-ai/claude-agent-sdk
 ```
 
 ## Authentication
@@ -102,6 +103,34 @@ const result = await wrappedAI.generateText({
   model: openai("gpt-4o-mini"),
   prompt: "Hello, world!",
 });
+```
+
+### Claude Agent SDK
+
+```ts
+import * as ze from "zeroeval";
+import * as claudeAgentSdk from "@anthropic-ai/claude-agent-sdk";
+
+ze.init();
+
+const sdk = ze.wrapClaudeAgentSdk(claudeAgentSdk);
+// or: const sdk = ze.wrap(claudeAgentSdk);
+
+for await (const message of sdk.query({
+  prompt: "What files are in this directory?",
+  options: { allowedTools: ["Bash", "Glob"] },
+})) {
+  if ("result" in message) console.log(message.result);
+}
+```
+
+You can also wrap just the `query` function directly:
+
+```ts
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import * as ze from "zeroeval";
+
+const tracedQuery = ze.wrapClaudeAgentQuery(query);
 ```
 
 ## License

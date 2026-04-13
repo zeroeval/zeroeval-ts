@@ -8,6 +8,8 @@
     "monitoring",
     "langchain",
     "openai",
+    "anthropic",
+    "claude-agent",
     "ai",
     "sdk",
     "analytics"
@@ -83,7 +85,8 @@
     "example:ai-stream-consume": "npm run build && npx ts-node --esm examples/07-ai-stream-consume.ts",
     "example:prompt": "npm run build && npx ts-node --esm examples/08-prompt.ts",
     "example:vapi": "npm run build && npx ts-node --esm examples/09-vapi.ts",
-    "example:pii-redaction": "npm run build && npx ts-node --esm examples/10-pii-redaction.ts"
+    "example:pii-redaction": "npm run build && npx ts-node --esm examples/10-pii-redaction.ts",
+    "example:claude-agent": "npm run build && npx ts-node --esm examples/11-claude-agent.ts"
   },
   "peerDependencies": {
     "@ai-sdk/openai": "^2.0.0",
@@ -91,7 +94,8 @@
     "@langchain/langgraph": "^0.3.6",
     "ai": "5.0.0-beta.28",
     "langchain": "^0.3.29",
-    "openai": "^5.8.2 || ^6.0.0"
+    "openai": "^5.8.2 || ^6.0.0",
+    "@anthropic-ai/claude-agent-sdk": ">=0.2.0"
   },
   "peerDependenciesMeta": {
     "@ai-sdk/openai": {
@@ -110,6 +114,9 @@
       "optional": true
     },
     "openai": {
+      "optional": true
+    },
+    "@anthropic-ai/claude-agent-sdk": {
       "optional": true
     }
   },

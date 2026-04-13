@@ -1,6 +1,10 @@
 import type { OpenAI } from 'openai';
 import { wrapOpenAI } from './openaiWrapper';
 import { wrapVercelAI } from './vercelAIWrapper';
+import {
+  wrapClaudeAgentSdk,
+  isClaudeAgentSdkModule,
+} from './claudeAgentWrapper';
 import { init, isInitialized } from '../../init';
 
 // Type for wrapped clients
@@ -111,6 +115,12 @@ export function wrap<T extends object>(client: T): WrappedClient<T> {
     return wrapVercelAI(client) as WrappedClient<T>;
   }
 
+  if (isClaudeAgentSdkModule(client)) {
+    return wrapClaudeAgentSdk(
+      client as Record<string, unknown>
+    ) as WrappedClient<T>;
+  }
+
   // If we reach here, the client type is not supported
   let clientType = 'unknown';
   if (typeof client === 'object' && client !== null) {
@@ -127,11 +137,13 @@ export function wrap<T extends object>(client: T): WrappedClient<T> {
     `Unsupported client type. ze.wrap() currently supports:\n` +
       `- OpenAI clients (from 'openai' package)\n` +
       `- Vercel AI SDK (from 'ai' package)\n` +
+      `- Claude Agent SDK (from '@anthropic-ai/claude-agent-sdk' package)\n` +
       `\n` +
       `Received: ${clientType}\n` +
       `\n` +
       `Make sure you're passing a valid client instance, e.g.:\n` +
       `  const openai = ze.wrap(new OpenAI());\n` +
-      `  const ai = ze.wrap(await import('ai'));`
+      `  const ai = ze.wrap(await import('ai'));\n` +
+      `  const claude = ze.wrap(await import('@anthropic-ai/claude-agent-sdk'));`
   );
 }

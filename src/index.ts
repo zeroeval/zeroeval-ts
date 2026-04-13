@@ -20,6 +20,11 @@ export { wrap } from './observability/integrations/wrapper';
 export { wrapOpenAI } from './observability/integrations/openaiWrapper';
 // Export wrapVercelAI for direct usage
 export { wrapVercelAI } from './observability/integrations/vercelAIWrapper';
+// Export Claude Agent SDK wrappers
+export {
+  wrapClaudeAgentSdk,
+  wrapClaudeAgentQuery,
+} from './observability/integrations/claudeAgentWrapper';
 export { Span } from './observability/Span';
 export type { RedactionConfig } from './observability/redaction';
 

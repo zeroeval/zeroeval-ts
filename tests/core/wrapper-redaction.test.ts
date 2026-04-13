@@ -5,6 +5,7 @@ import { tracer } from '../../src/observability/Tracer';
 import { ZeroEvalCallbackHandler } from '../../src/observability/integrations/langchain/ZeroEvalCallbackHandler';
 import { wrapOpenAI } from '../../src/observability/integrations/openaiWrapper';
 import { wrapVercelAI } from '../../src/observability/integrations/vercelAIWrapper';
+import { wrapClaudeAgentQuery } from '../../src/observability/integrations/claudeAgentWrapper';
 import { MockSpanWriter } from '../setup';
 
 describe('wrapper redaction', () => {
@@ -186,6 +187,51 @@ describe('wrapper redaction', () => {
     expect(mockWriter.spans).toHaveLength(1);
     expect(mockWriter.spans[0].input_data).toContain('[REDACTED_EMAIL_A]');
     expect(mockWriter.spans[0].input_data).not.toContain('[REDACTED_SECRET');
+  });
+
+  it('should redact Claude Agent wrapper prompt and output', async () => {
+    const fakeQuery = function fakeQuery() {
+      async function* gen() {
+        yield {
+          type: 'assistant',
+          message: {
+            content: [
+              { type: 'text', text: 'Reach me at bob@example.com or +1 (415) 555-1212' },
+            ],
+          },
+          parent_tool_use_id: null,
+          uuid: 'u1',
+          session_id: 'cs1',
+        };
+        yield {
+          type: 'result',
+          subtype: 'success',
+          duration_ms: 100,
+          is_error: false,
+          num_turns: 1,
+          result: 'done',
+          total_cost_usd: 0.001,
+          usage: {},
+          uuid: 'u2',
+          session_id: 'cs1',
+        };
+      }
+      return gen();
+    };
+
+    const wrapped = wrapClaudeAgentQuery(fakeQuery as any);
+    for await (const _ of wrapped({
+      prompt: 'Email bob@example.com about the JWT eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.foo.bar',
+    })) {
+      // consume
+    }
+    await tracer.flush();
+
+    expect(mockWriter.spans).toHaveLength(1);
+    const span = mockWriter.spans[0];
+    expect(span.input_data).not.toContain('bob@example.com');
+    expect(span.output_data).toContain('[REDACTED_EMAIL_A]');
+    expect(span.output_data).toContain('[REDACTED_PHONE_A]');
   });
 
   it('should fall back to an empty object for falsy Vercel generateObject results', async () => {
