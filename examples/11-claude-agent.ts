@@ -10,7 +10,7 @@
  *   npm run example:claude-agent
  */
 
-import * as ze from '../src/index';
+import * as ze from 'zeroeval';
 
 ze.init();
 
