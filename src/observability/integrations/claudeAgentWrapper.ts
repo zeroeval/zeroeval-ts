@@ -614,20 +614,28 @@ function createWrappedSession(session: SDKSession): SDKSession {
         error = err instanceof Error ? err : new Error(String(err));
         throw err;
       } finally {
-        if (error) {
-          const closed = pending.pop();
-          if (closed) {
+        const closed = pending.pop();
+        if (closed) {
+          try {
+            applyStateToSpan(closed.span, closed.state);
+          } catch {
+            // best-effort
+          }
+          if (error) {
             try {
-              applyStateToSpan(closed.span, closed.state);
               closed.span.setError({
                 code: error.name,
                 message: error.message,
                 stack: error.stack,
               });
-              tracer.endSpan(closed.span);
             } catch {
               // best-effort
             }
+          }
+          try {
+            tracer.endSpan(closed.span);
+          } catch {
+            // best-effort
           }
         }
       }
