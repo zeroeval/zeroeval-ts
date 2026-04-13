@@ -639,6 +639,7 @@ function createWrappedSession(session: SDKSession): SDKSession {
 
     async function* tracedSessionStream(): AsyncGenerator<SDKMessage, void> {
       let error: Error | null = null;
+      let turnEndedInLoop = false;
       try {
         for await (const message of originalGen) {
           const current = pending.peek();
@@ -661,15 +662,17 @@ function createWrappedSession(session: SDKSession): SDKSession {
                 // best-effort
               }
             }
+            turnEndedInLoop = true;
           }
 
           yield message;
+          turnEndedInLoop = false;
         }
       } catch (err) {
         error = err instanceof Error ? err : new Error(String(err));
         throw err;
       } finally {
-        const closed = pending.pop();
+        const closed = turnEndedInLoop ? undefined : pending.pop();
         if (closed) {
           try {
             applyStateToSpan(closed.span, closed.state);
