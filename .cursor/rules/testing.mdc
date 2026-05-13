@@ -1,0 +1,103 @@
+---
+description: Testing requirements for TypeScript SDK - test after modifications and new features
+globs: ['**/*.ts', '**/*.js']
+alwaysApply: true
+---
+
+# Testing Guidelines
+
+## Test After Every Modification
+
+**After each modification, double check the tests and run them.**
+
+## New Feature Testing
+
+**If it's a new feature, it should be tested.**
+
+## Implementation Standards
+
+**Implementations should be concise and well designed. Simple.**
+
+## Test Structure
+
+Tests are located in:
+
+- `/tests/` - Main test directory
+- `/tests/core/` - Core functionality tests
+- `/tests/performance/` - Performance tests
+
+## Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run specific test file
+npm test -- span.test.ts
+
+# Run with coverage
+npm run test:coverage
+```
+
+## Test Requirements
+
+### For Modifications
+
+1. **Run existing tests** to ensure nothing breaks
+2. **Update tests** if behavior changes
+3. **Verify test coverage** remains adequate
+
+### For New Features
+
+1. **Write unit tests** for core functionality
+2. **Add integration tests** if needed
+3. **Include edge case tests**
+4. **Test error conditions**
+
+## Example Test Structure
+
+```typescript
+// tests/core/new-feature.test.ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { NewFeature } from '../src/new-feature';
+
+describe('NewFeature', () => {
+  let feature: NewFeature;
+
+  beforeEach(() => {
+    feature = new NewFeature();
+  });
+
+  it('should execute basic functionality', () => {
+    const result = feature.execute();
+    expect(result).toBeDefined();
+    expect(result).toHaveProperty('data');
+  });
+
+  it('should handle edge cases', () => {
+    expect(() => {
+      feature.execute({ invalidInput: true });
+    }).toThrow('Invalid input provided');
+  });
+
+  it('should integrate with other components', async () => {
+    // Integration test logic
+    const result = await feature.integrateWith(mockComponent);
+    expect(result.success).toBe(true);
+  });
+});
+```
+
+## Checklist
+
+Before submitting changes:
+
+- [ ] All existing tests pass
+- [ ] New functionality is tested
+- [ ] Tests are simple and focused
+- [ ] Edge cases are covered
+- [ ] Error conditions are tested
+- [ ] TypeScript types are tested

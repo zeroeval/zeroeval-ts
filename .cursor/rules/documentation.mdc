@@ -1,0 +1,152 @@
+---
+description: Documentation requirements for TypeScript SDK changes - update docs with examples
+globs: ['**/*.ts', '**/*.js']
+alwaysApply: true
+---
+
+# Documentation Guidelines
+
+## Documentation Requirement
+
+**For every change in the TypeScript SDK, check the @docs/ folder and document the changes.**
+
+## Documentation Location
+
+SDK documentation is located at:
+
+- `/docs/tracing/sdks/typescript/` - Main TypeScript SDK docs
+- `/docs/tracing/sdks/typescript/setup.mdx` - Setup instructions
+- `/docs/tracing/sdks/typescript/reference.mdx` - API reference
+- `/docs/tracing/sdks/typescript/integrations.mdx` - Integration guides
+
+## Documentation Standards
+
+**The documentation should be simple to understand, detailed, and with a mini example. Always readable and concise.**
+
+## Documentation Structure
+
+### For New Features
+
+````mdx
+## Feature Name
+
+Brief description of what this feature does and why it's useful.
+
+### Setup
+
+```typescript
+import { FeatureName } from '@zeroeval/typescript';
+
+// Basic setup
+const feature = new FeatureName({
+  apiKey: 'your_key',
+});
+```
+````
+
+### Usage
+
+```typescript
+// Simple example
+const result = await feature.execute({
+  inputData: 'example',
+  options: { param: 'value' },
+});
+
+console.log(result);
+```
+
+### Parameters
+
+| Parameter   | Type     | Required | Description                  |
+| ----------- | -------- | -------- | ---------------------------- |
+| `inputData` | `string` | Yes      | Description of the parameter |
+| `options`   | `object` | No       | Optional configuration       |
+
+### Returns
+
+Returns a `Promise<FeatureResult>` with the following properties:
+
+- `data`: The processed result
+- `metadata`: Additional information about the operation
+
+````
+
+### For API Changes
+- Update the API reference section
+- Add deprecation warnings if needed
+- Update version information
+- Include migration examples
+
+### For Integration Changes
+- Update relevant integration guide (Langchain, Vercel AI, etc.)
+- Add new integration examples
+- Update compatibility matrix
+
+## Example Documentation Update
+
+When adding a new tracing feature:
+
+```mdx
+## Manual Span Creation
+
+Create custom spans to track specific operations in your application.
+
+### Basic Usage
+
+```typescript
+import { tracer } from '@zeroeval/typescript';
+
+// Create a custom span
+await tracer.span('custom_operation', { tags: { userId: '123' } }, async (span) => {
+  // Your operation here
+  const result = await performOperation();
+  span.setAttribute('result_count', result.length);
+  return result;
+});
+````
+
+### Advanced Usage
+
+```typescript
+// Nested spans with custom attributes
+await tracer.span('parent_operation', async (parent) => {
+  parent.setAttribute('operation_type', 'batch_process');
+
+  await tracer.span('child_operation', { parent }, async (child) => {
+    child.setAttribute('item_count', 10);
+    await processItems();
+  });
+});
+```
+
+### TypeScript Types
+
+```typescript
+interface SpanOptions {
+  parent?: Span;
+  tags?: Record<string, string>;
+  attributes?: Record<string, any>;
+}
+
+interface Span {
+  setAttribute(key: string, value: any): void;
+  setTag(key: string, value: string): void;
+  finish(): void;
+}
+```
+
+```
+
+## Checklist
+
+When making SDK changes:
+- [ ] Identify affected documentation sections
+- [ ] Update relevant .mdx files
+- [ ] Add mini examples for new features
+- [ ] Ensure examples are tested and work
+- [ ] Keep language simple and clear
+- [ ] Include parameter descriptions
+- [ ] Add return value documentation
+- [ ] Include TypeScript types where relevant
+```
